@@ -1,0 +1,1970 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>兒科專案品質與臨床量能儀表板</title>
+    <!-- 載入專業圖表引擎 ECharts 與 Tailwind CSS 框架 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        /* 高齡友善字體放大的全域優化 */
+        body { 
+            font-size: 1.25rem; 
+            font-family: "Inter", "Roboto", "Helvetica", "Source Han Sans TC", "Microsoft JhengHei", sans-serif;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+        }
+        .kpi-title { font-size: 1.25rem; font-weight: 900; color: #1e3a8a; min-height: 2.5rem; display: flex; align-items: center; }
+        .kpi-value { font-size: 2.8rem; font-weight: 950; letter-spacing: -0.02em; }
+        button { font-size: 1.2rem !important; font-weight: 800 !important; }
+        .report-table th { font-weight: 900; text-align: center; border: 2px solid #94a3b8; padding: 12px 8px; font-size: 1.15rem; }
+        .report-table th:not([class*="bg-"]) { background-color: #1e3a8a; }
+        .report-table th:not([class*="text-"]) { color: #ffffff; }
+        .report-table td { border: 2px solid #cbd5e1; padding: 12px 8px; text-align: center; font-weight: 900; font-size: 1.15rem; }
+        .report-table td:not([class*="text-"]) { color: #0f172a; }
+        .bg-red-header { background-color: #ef4444 !important; color: #ffffff !important; }
+        .bg-teal-header { background-color: #0d9488 !important; color: #ffffff !important; }
+        /* 同步狀態燈號：改用固定 CSS class（不依賴 Tailwind CDN 動態產生的 class 組合），
+           確保深色底配淺色字一定能正確顯示，不會因為 class 是用 JS 動態組字串設定而抓不到樣式。 */
+        .sync-badge { display: flex; align-items: center; font-size: 0.875rem; font-weight: 700; padding: 0.375rem 0.75rem; border-radius: 9999px; border-width: 1px; border-style: solid; }
+        .sync-badge .sync-dot { width: 0.75rem; height: 0.75rem; border-radius: 9999px; margin-right: 0.5rem; animation: pulse 2s cubic-bezier(0.4,0,0.6,1) infinite; }
+        .sync-badge.state-syncing { color: #fcd34d; background-color: #451a03; border-color: #d97706; }
+        .sync-badge.state-syncing .sync-dot { background-color: #fcd34d; }
+        .sync-badge.state-synced { color: #34d399; background-color: #022c22; border-color: #10b981; }
+        .sync-badge.state-synced .sync-dot { background-color: #34d399; }
+        .sync-badge.state-offline { color: #cbd5e1; background-color: #1e293b; border-color: #64748b; }
+        .sync-badge.state-offline .sync-dot { background-color: #94a3b8; }
+        .sync-badge.state-error { color: #fca5a5; background-color: #450a0a; border-color: #ef4444; }
+        .sync-badge.state-error .sync-dot { background-color: #f87171; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+        .bg-amber-header { background-color: #ffaa00 !important; color: #ffffff !important; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-900 select-none">
+ 
+    <!-- 頂部功能導覽列 -->
+    <header class="bg-blue-900 text-white p-5 shadow-lg flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-extrabold tracking-wide">兒科專案品質與臨床量能儀表板</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span id="sync-status" class="sync-badge state-syncing">
+                <span class="sync-dot"></span>雲端同步中...
+            </span>
+            <button id="btn-mode-toggle" onclick="toggleMode()" class="bg-white text-blue-900 text-base font-black px-5 py-2 rounded shadow-md hover:bg-amber-100 border-2 border-amber-400 transition">
+                登入
+            </button>
+        </div>
+    </header>
+ 
+    <!-- 頂部時間控制列（1.年份切換正式改為下拉式選單） -->
+    <section class="bg-amber-50 border-b-4 border-amber-200 p-4 flex flex-wrap items-center gap-6 shadow-md">
+        <div class="flex items-center space-x-2">
+            <span class="text-gray-700 font-black text-lg mr-2">📅 選擇年份：</span>
+            <!-- 改採最防呆穩定的下拉選單結構 -->
+            <select id="year-select" onchange="selectYear(this.value)" class="border-2 border-blue-500 p-2 font-black text-base rounded-lg bg-white shadow-sm text-blue-900">
+                <!-- 由資料自動動態生成年份選項 -->
+            </select>
+        </div>
+        <div class="h-6 w-[2px] bg-gray-300 hidden md:block"></div>
+        <div class="flex items-center space-x-2">
+            <span class="text-gray-700 font-black text-lg mr-2">⏱️ 選擇區間：</span>
+            <div class="flex space-x-1.5 bg-slate-200 p-1 rounded-full">
+                <button id="m-all" onclick="changeMonth('全年')" class="month-btn bg-blue-700 text-white font-black px-4 py-1.5 rounded-full shadow">全年</button>
+                <button id="m-q1" onclick="changeMonth('Q1')" class="month-btn bg-white text-gray-800 font-bold px-4 py-1.5 rounded-full hover:bg-gray-100">第一季 (Q1)</button>
+                <button id="m-q2" onclick="changeMonth('Q2')" class="month-btn bg-white text-gray-800 font-bold px-4 py-1.5 rounded-full hover:bg-gray-100">第二季 (Q2)</button>
+                <button id="m-q3" onclick="changeMonth('Q3')" class="month-btn bg-white text-gray-800 font-bold px-4 py-1.5 rounded-full hover:bg-gray-100">第三季 (Q3)</button>
+                <button id="m-q4" onclick="changeMonth('Q4')" class="month-btn bg-white text-gray-800 font-bold px-4 py-1.5 rounded-full hover:bg-gray-100">第四季 (Q4)</button>
+            </div>
+        </div>
+        <div class="h-6 w-[2px] bg-gray-300 hidden md:block"></div>
+        <div class="flex items-center space-x-1 overflow-x-auto">
+            <span class="text-gray-700 font-black text-lg mr-2">細分月份：</span>
+            <div id="month-group" class="flex space-x-1"></div>
+        </div>
+    </section>
+ 
+    <!-- 主選書籤頁簽 -->
+    <nav class="bg-white border-b-2 px-6 flex space-x-8 text-lg font-black shadow-sm">
+        <button id="t-overview" onclick="switchTab('tab-overview')" class="tab-link border-b-4 border-blue-700 text-blue-700 py-4 px-2">📋 指標總覽</button>
+        <button id="t-hosp" onclick="switchTab('tab-hosp')" class="tab-link border-b-4 border-transparent text-gray-600 hover:text-blue-700 py-4 px-2">📊 門急住院量能</button>
+        <button id="t-specialist" onclick="switchTab('tab-specialist')" class="tab-link border-b-4 border-transparent text-gray-600 hover:text-red-600 py-4 px-2">👶 幼兒專責醫師</button>
+        <button id="t-asthma" onclick="switchTab('tab-asthma')" class="tab-link border-b-4 border-transparent text-gray-600 hover:text-teal-600 py-4 px-2">🫁 兒童氣喘照護</button>
+        <button id="t-dev" onclick="switchTab('tab-dev')" class="tab-link border-b-4 border-transparent text-gray-600 hover:text-amber-600 py-4 px-2">🔍 幼兒發展評估</button>
+        <button id="tab-input-link" onclick="switchTab('tab-input')" class="tab-link border-b-4 border-transparent text-red-600 hover:text-red-700 py-4 px-2 hidden">📝 月報鍵入</button>
+        <button id="tab-cloud-link" onclick="switchTab('tab-cloud')" class="tab-link border-b-4 border-transparent text-slate-700 hover:text-slate-900 py-4 px-2 hidden">☁️ 雲端匯出</button>
+    </nav>
+ 
+    <!-- 核心內容顯示區 -->
+    <main class="max-w-7xl mx-auto p-4">
+         
+        <!-- 【分頁：指標總覽】 -->
+        <div id="tab-overview" class="tab-content block">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white p-5 rounded-xl shadow border-2 border-gray-200 border-l-[10px] border-l-blue-600">
+                    <div class="kpi-title">兒科住院人次</div>
+                    <div class="text-blue-600 kpi-value" id="kpi-hosp">-- 人</div>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow border-2 border-gray-200 border-l-[10px] border-l-red-600">
+                    <div class="kpi-title">幼兒專責醫師新案數</div>
+                    <div class="text-red-600 kpi-value" id="kpi-spec">-- 人</div>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow border-2 border-gray-200 border-l-[10px] border-l-teal-600">
+                    <div class="kpi-title">幼兒氣喘照護新案數</div>
+                    <div class="text-teal-600 kpi-value" id="kpi-asthma">-- 人</div>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow border-2 border-gray-200 border-l-[10px] border-l-amber-600">
+                    <div class="kpi-title">幼兒發展評估新案數</div>
+                    <div class="text-amber-600 kpi-value" id="kpi-dev">-- 案</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-4 rounded-xl shadow border border-gray-300"><div id="c-hosp-main" style="height: 380px;"></div></div>
+                <div class="bg-white p-4 rounded-xl shadow border border-gray-300"><div id="c-spec-main-panel" style="height: 380px;"></div></div>
+                <div class="bg-white p-4 rounded-xl shadow border border-gray-300"><div id="c-asthma-main-panel" style="height: 380px;"></div></div>
+                <div class="bg-white p-4 rounded-xl shadow border border-gray-300"><div id="c-dev-main" style="height: 380px;"></div></div>
+            </div>
+        </div>
+ 
+        <!-- 【分頁：門急住院量能】 -->
+        <div id="tab-hosp" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow border border-gray-300">
+                <h3 class="font-black text-2xl text-blue-900 border-b-4 border-blue-200 pb-2 mb-4">📊 入院來源</h3>
+                <div class="flex flex-wrap gap-x-8 gap-y-2 justify-center mb-3 text-lg font-bold text-slate-800">
+                    <div class="flex items-center gap-4">
+                        <span>温秀惠醫師：</span>
+                        <span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded-sm inline-block" style="background:#0066cc"></span>門診</span>
+                        <span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded-sm inline-block" style="background:#cc0022"></span>急診</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span>范揚達醫師：</span>
+                        <span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded-sm inline-block" style="background:#00aa55"></span>門診</span>
+                        <span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded-sm inline-block" style="background:#ffaa00"></span>急診</span>
+                    </div>
+                </div>
+                <div id="c-hosp-detail" style="width: 100%; height: 500px;"></div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow border border-gray-300 flex flex-col items-center">
+                    <h4 class="font-black text-xl text-slate-800 border-b w-full text-center pb-2 mb-2" id="title-pie-wen">温秀惠醫師 入院比例</h4>
+                    <div id="c-hosp-pie-wen" style="width: 100%; height: 350px;"></div>
+                </div>
+                 <div class="bg-white p-6 rounded-xl shadow border border-gray-300 flex flex-col items-center">
+                    <h4 class="font-black text-xl text-slate-800 border-b w-full text-center pb-2 mb-2" id="title-pie-fan">范揚達醫師 入院比例</h4>
+                    <div id="c-hosp-pie-fan" style="width: 100%; height: 350px;"></div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow border border-gray-300">
+                <h3 id="table-title-hosp" class="font-black text-2xl text-slate-800 mb-3 flex items-center">
+                    <span class="w-2.5 h-7 bg-blue-600 inline-block mr-2 rounded"></span> 🏥 門急診住院量能：臨床照護統計明細表
+                </h3>
+                <table class="w-full report-table shadow-sm">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="w-1/6">統計區間</th>
+                            <th colspan="3" class="bg-blue-600 text-white">温秀惠醫師 收治量 (人)</th>
+                            <th colspan="3" class="bg-emerald-600 text-white">范揚達醫師 收治量 (人)</th>
+                            <th rowspan="2" class="bg-amber-header w-1/6">全科住院總計</th>
+                        </tr>
+                        <tr>
+                            <th class="bg-blue-400 text-white">門診入院</th>
+                            <th class="bg-blue-500 text-white">急診入院</th>
+                            <th class="bg-blue-700 text-white font-black">小計</th>
+                            <th class="bg-emerald-400 text-white">門診入院</th>
+                            <th class="bg-emerald-500 text-white">急診入院</th>
+                            <th class="bg-emerald-700 text-white font-black">小計</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-hosp-total"></tbody>
+                </table>
+            </div>
+        </div>
+ 
+        <!-- 【分頁：幼兒專責醫師】 -->
+        <div id="tab-specialist" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow border border-gray-300">
+                <h3 class="font-black text-xl text-red-900 border-b-2 pb-2 mb-4">幼兒專責醫師計畫：每月新收案與總列管成長指標</h3>
+                <div id="c-spec-detail" style="height: 400px;"></div>
+            </div>
+ 
+            <div class="bg-white p-6 rounded-xl shadow border border-gray-300 space-y-8">
+                <div>
+                    <h3 id="table-title-total" class="font-black text-2xl text-slate-800 mb-3 flex items-center">
+                        <span class="w-2.5 h-7 bg-red-600 inline-block mr-2 rounded"></span> 幼兒專責統計：全科案件總計表
+                    </h3>
+                    <table class="w-full report-table shadow-sm">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" class="w-1/6">統計區間</th>
+                                <th colspan="3" class="bg-red-500 text-white">收案紀錄統計 (人)</th>
+                                <th colspan="3" class="bg-green-700 text-white">結案紀錄統計 (人)</th>
+                                <th rowspan="2" class="bg-amber-header w-1/6">期末列管總數</th>
+                            </tr>
+                            <tr>
+                                <th class="bg-red-header">一般收案</th>
+                                <th class="bg-red-header">指定收案</th>
+                                <th class="bg-red-header font-black">收案總計</th>
+                                <th class="bg-green-500 text-white">一般結案</th>
+                                <th class="bg-green-500 text-white">指定結案</th>
+                                <th class="bg-green-700 text-white font-black">結案總計</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-spec-total"></tbody>
+                    </table>
+                </div>
+ 
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="font-black text-xl text-slate-800 mb-2 flex items-center">
+                            <span class="w-2 h-5 bg-blue-800 inline-block mr-2 rounded"></span>負責醫師明細：温秀惠醫師
+                        </h4>
+                        <table class="w-full report-table shadow-sm">
+                            <thead>
+                                <tr>
+                                    <th class="w-1/4">區間</th>
+                                    <th class="bg-red-header">收案人次</th>
+                                    <th class="bg-green-500 text-white">結案人次</th>
+                                    <th class="bg-amber-header">列管數</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-spec-wen"></tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <h4 class="font-black text-xl text-slate-800 mb-2 flex items-center">
+                            <span class="w-2 h-5 bg-emerald-700 inline-block mr-2 rounded"></span> 負責醫師明細：范揚達醫師
+                        </h4>
+                        <table class="w-full report-table shadow-sm">
+                            <thead>
+                                <tr>
+                                    <th class="w-1/4">區間</th>
+                                    <th class="bg-red-header">收案人次</th>
+                                    <th class="bg-green-500 text-white">結案人次</th>
+                                    <th class="bg-amber-header">列管數</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-spec-fan"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+ 
+        <!-- 【分頁：兒童氣喘照護】 -->
+        <div id="tab-asthma" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow border border-gray-300">
+                <h3 class="font-black text-xl text-teal-900 border-b-2 pb-2 mb-4">兒童氣喘照護品質方案：多元核心指標量能與總列管分析</h3>
+                <div id="c-asthma-detail" style="height: 450px;"></div>
+            </div>
+             
+            <div class="bg-white p-6 rounded-xl shadow border border-gray-300">
+                <h3 id="table-title-asthma" class="font-black text-2xl text-slate-800 mb-3 flex items-center">
+                    <span class="w-2.5 h-7 bg-teal-600 inline-block mr-2 rounded"></span> 兒童氣喘品質方案：核心指標統計表
+                </h3>
+                <table class="w-full report-table shadow-sm">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="w-1/6">統計區間</th>
+                            <th colspan="4" class="bg-teal-600 text-white">個案管理紀錄統計 (人)</th>
+                            <th rowspan="2" class="bg-amber-header w-1/6">當月期末列管總數</th>
+                        </tr>
+                        <tr>
+                            <th class="bg-red-header">新案數</th>
+                            <th class="bg-red-header">追蹤人次</th>
+                            <th class="bg-red-header">年度追蹤人次</th>
+                            <th class="bg-teal-header">結案人數</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-asthma-total"></tbody>
+                </table>
+            </div>
+        </div>
+ 
+        <!-- 【分頁：幼兒發展評估】 -->
+        <div id="tab-dev" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow border border-gray-300 lg:col-span-2 flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-black text-2xl text-amber-900 border-b-4 border-amber-200 pb-2 mb-4">📊 篩檢收案年齡分佈</h3>
+                        <div id="c-dev-age-pie" style="height: 470px;"></div>
+                    </div>
+                    <p class="text-xs text-red-500 font-bold mt-6">註：百分比採四捨五入，合計可能不等於 100%。</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow border border-gray-300 flex flex-col justify-between space-y-4">
+                    <div>
+                        <h3 class="font-black text-xl text-slate-800 border-b pb-2 mb-4">📈 收案趨勢動態監控</h3>
+                        <div id="c-dev-detail" style="height: 320px;"></div>
+                    </div>
+                    <div class="bg-yellow-300 p-4 rounded border-2 border-yellow-400 text-center shadow-md">
+                        <div class="text-2xl font-black text-slate-900" id="dev-total-badge">收案人數：-- 人</div>
+                    </div>
+                </div>
+            </div>
+ 
+            <div class="bg-white p-6 rounded-xl shadow border border-gray-300 space-y-6">
+                <h3 id="table-title-dev-total" class="font-black text-2xl text-slate-800 mb-3 flex items-center">
+                    <span class="w-2.5 h-7 bg-amber-500 inline-block mr-2 rounded"></span> 🔍 幼兒發展評估：全科與負責醫師收案績效表
+                </h3>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="font-black text-xl text-slate-800 mb-2 flex items-center">
+                            <span class="w-2 h-5 bg-purple-600 inline-block mr-2 rounded"></span>全科門診統計
+                        </h4>
+                        <table class="w-full report-table shadow-sm">
+                            <thead>
+                                <tr>
+                                    <th class="w-1/3">統計區間</th>
+                                    <th>門診看診 (人)</th>
+                                    <th class="bg-amber-header">收案總計</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-dev-total"></tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <h4 class="font-black text-xl text-slate-800 mb-2 flex items-center">
+                            <span class="w-2 h-5 bg-blue-800 inline-block mr-2 rounded"></span>負責醫師收案量
+                        </h4>
+                        <table class="w-full report-table shadow-sm">
+                            <thead>
+                                <tr>
+                                    <th class="w-1/3">統計區間</th>
+                                    <th class="bg-red-header">温秀惠醫師 (案)</th>
+                                    <th class="bg-green-500 text-white">范揚達醫師 (案)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-dev-doctors"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="font-black text-xl text-slate-800 mb-2 flex items-center">
+                        <span class="w-2 h-5 bg-amber-600 inline-block mr-2 rounded"></span>各年齡層收案分佈
+                    </h4>
+                    <table class="w-full report-table shadow-sm">
+                        <thead>
+                            <tr>
+                                <th class="w-1/6">統計區間</th>
+                                <th>6至10個月</th>
+                                <th>10個月-1歲半</th>
+                                <th>1歲半-2歲</th>
+                                <th>2歲-3歲</th>
+                                <th>3歲-5歲</th>
+                                <th>5歲-未滿7歲</th>
+                                <th class="bg-amber-header">合計</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-dev-age"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+ 
+        <!-- 🔧 【分頁：月報鍵入】（高齡友善大字版，已與雲端匯出分頁） -->
+        <div id="tab-input" class="tab-content hidden">
+            <div class="bg-white p-6 rounded-xl shadow border">
+                <h3 class="font-black text-2xl text-red-600 border-b-4 border-red-200 pb-3 mb-5 flex flex-wrap justify-between items-center gap-3">
+                    <span>📝 選擇欲鍵入資料的年份月份：</span>
+                    <select id="form-period" class="border-2 border-red-300 text-xl p-3 font-black rounded-lg bg-slate-50" onchange="loadFormValues()"></select>
+                </h3>
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 text-lg font-bold">
+                    <div class="border-2 p-4 rounded-xl bg-slate-50">
+                        <h4 class="font-black text-2xl text-blue-900 mb-3 border-b-2 pb-1">🏥 門急住院統計</h4>
+                        <div class="space-y-3">
+                            <label class="block text-lg text-gray-700 font-black">温秀惠醫師（門診 / 急診）</label>
+                            <div class="flex space-x-3"><input type="number" id="f-wen-c" oninput="updateHospTotals()" class="border-2 p-3 w-full rounded-lg text-xl text-center"> <input type="number" id="f-wen-e" oninput="updateHospTotals()" class="border-2 p-3 w-full rounded-lg text-xl text-center"></div>
+                            <div class="text-base font-black text-blue-800">温秀惠醫師當月合計：<span id="wen-hosp-total-display">0</span> 人</div>
+                            <label class="block text-lg text-gray-700 font-black mt-3">范揚達醫師（門診 / 急診）</label>
+                            <div class="flex space-x-3"><input type="number" id="f-fan-c" oninput="updateHospTotals()" class="border-2 p-3 w-full rounded-lg text-xl text-center"> <input type="number" id="f-fan-e" oninput="updateHospTotals()" class="border-2 p-3 w-full rounded-lg text-xl text-center"></div>
+                            <div class="text-base font-black text-emerald-800">范揚達醫師當月合計：<span id="fan-hosp-total-display">0</span> 人</div>
+                            <div class="bg-amber-100 border-2 border-amber-300 rounded-lg p-2 text-center font-black text-amber-900 text-lg">
+                                全科當月住院總計：<span id="all-hosp-total-display">0</span> 人
+                            </div>
+                        </div>
+                    </div>
+                    <div class="border-2 p-4 rounded-xl bg-slate-50">
+                        <h4 class="font-black text-2xl text-red-900 mb-3 border-b-2 pb-1">👶 幼兒專責醫師統計</h4>
+                        <p class="text-sm font-bold text-gray-500 mb-2">※ 全科收案／結案／期末列管數，皆由下方温、范二位醫師之數據自動加總，不需再另行鍵入。</p>
+                        <div class="space-y-4">
+                            <div>
+                                <div class="font-black text-lg text-blue-900 mb-1">温秀惠醫師</div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div><label class="text-base text-gray-600">一般收案</label><input type="number" id="f-wen-g-in" class="border-2 p-2 rounded-lg w-full text-lg text-center"></div>
+                                    <div><label class="text-base text-gray-600">指定收案</label><input type="number" id="f-wen-s-in" class="border-2 p-2 rounded-lg w-full text-lg text-center"></div>
+                                    <div><label class="text-base text-gray-600">一般結案</label><input type="number" id="f-wen-g-out" class="border-2 p-2 rounded-lg w-full text-lg text-center"></div>
+                                    <div><label class="text-base text-gray-600">指定結案</label><input type="number" id="f-wen-s-out" class="border-2 p-2 rounded-lg w-full text-lg text-center"></div>
+                                </div>
+                                <div class="text-base font-black text-blue-800 mt-1">目前累計列管數：<span id="wen-managed-display">--</span> 人（自動計算）</div>
+                            </div>
+                            <div class="h-[2px] bg-gray-300"></div>
+                            <div>
+                                <div class="font-black text-lg text-emerald-800 mb-1">范揚達醫師</div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div><label class="text-base text-gray-600">一般收案</label><input type="number" id="f-fan-g-in" class="border-2 p-2 rounded-lg w-full text-lg text-center"></div>
+                                    <div><label class="text-base text-gray-600">指定收案</label><input type="number" id="f-fan-s-in" class="border-2 p-2 rounded-lg w-full text-lg text-center"></div>
+                                    <div><label class="text-base text-gray-600">一般結案</label><input type="number" id="f-fan-g-out" class="border-2 p-2 rounded-lg w-full text-lg text-center"></div>
+                                    <div><label class="text-base text-gray-600">指定結案</label><input type="number" id="f-fan-s-out" class="border-2 p-2 rounded-lg w-full text-lg text-center"></div>
+                                </div>
+                                <div class="text-base font-black text-emerald-800 mt-1">目前累計列管數：<span id="fan-managed-display">--</span> 人（自動計算）</div>
+                            </div>
+                            <div class="bg-amber-100 border-2 border-amber-300 rounded-lg p-2 text-center font-black text-amber-900 text-lg">
+                                全科期末列管數：<span id="total-managed-display">--</span> 人
+                            </div>
+                        </div>
+                    </div>
+                    <div class="border-2 p-4 rounded-xl bg-slate-50">
+                       <h4 class="font-black text-2xl text-teal-900 mb-3 border-b-2 pb-1">🫁 兒童氣喘照護統計</h4>
+                        <p class="text-sm font-bold text-gray-500 mb-2">※ 當月期末列管數＝前期列管數＋新案數＋追蹤人次＋年度追蹤人次－結案人數，自動計算，不需再另行鍵入。</p>
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="text-base text-gray-600">新案數</label><input type="number" id="f-asthma-new" class="border-2 p-2 w-full rounded-lg text-lg text-center"></div>
+                                <div><label class="text-base text-gray-600">追蹤人次</label><input type="number" id="f-asthma-follow" class="border-2 p-2 w-full rounded-lg text-lg text-center"></div>
+                                <div><label class="text-base text-gray-600">年度追蹤人次</label><input type="number" id="f-asthma-y-follow" class="border-2 p-2 w-full rounded-lg text-lg text-center"></div>
+                                <div><label class="text-base text-gray-600">結案人數</label><input type="number" id="f-asthma-close" class="border-2 p-2 w-full rounded-lg text-lg text-center"></div>
+                            </div>
+                           <div class="bg-amber-100 border-2 border-amber-300 rounded-lg p-2 text-center font-black text-amber-900 text-lg">
+                                當月期末列管數：<span id="asthma-managed-display">--</span> 人
+                           </div>
+                        </div>
+                    </div>
+                    <div class="border-2 p-4 rounded-xl bg-slate-50">
+                        <h4 class="font-black text-2xl text-amber-900 mb-3 border-b-2 pb-1">🔍 幼兒發展評估</h4>
+                        <div class="space-y-3">
+                           <div><label class="text-lg text-gray-700 font-black">兒科門診看診人數(6個月-未滿7歲)</label><input type="number" id="f-dev-seen" class="border-2 p-3 w-full rounded-lg text-xl text-center"></div>
+                           <p class="text-sm font-bold text-gray-500">收案請分以下年齡：6至10個月 / 10個月-1歲半 / 1歲半-2歲 / 2歲-3歲 / 3歲-5歲 / 5歲-未滿7歲</p>
+                           <div class="grid grid-cols-2 gap-4">
+                               <div>
+                                   <div class="font-black text-base text-blue-900 mb-1">温秀惠醫師</div>
+                                   <div class="space-y-1">
+                                       <div><label class="text-sm text-gray-600">6至10個月</label><input type="number" id="f-dev-wen-1" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                       <div><label class="text-sm text-gray-600">10個月-1歲半</label><input type="number" id="f-dev-wen-2" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                       <div><label class="text-sm text-gray-600">1歲半-2歲</label><input type="number" id="f-dev-wen-3" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                       <div><label class="text-sm text-gray-600">2歲-3歲</label><input type="number" id="f-dev-wen-4" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                       <div><label class="text-sm text-gray-600">3歲-5歲</label><input type="number" id="f-dev-wen-5" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                       <div><label class="text-sm text-gray-600">5歲-未滿7歲</label><input type="number" id="f-dev-wen-6" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                   </div>
+                               </div>
+                               <div>
+                                   <div class="font-black text-base text-emerald-800 mb-1">范揚達醫師</div>
+                                   <div class="space-y-1">
+                                       <div><label class="text-sm text-gray-600">6至10個月</label><input type="number" id="f-dev-fan-1" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                       <div><label class="text-sm text-gray-600">10個月-1歲半</label><input type="number" id="f-dev-fan-2" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                       <div><label class="text-sm text-gray-600">1歲半-2歲</label><input type="number" id="f-dev-fan-3" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                       <div><label class="text-sm text-gray-600">2歲-3歲</label><input type="number" id="f-dev-fan-4" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                       <div><label class="text-sm text-gray-600">3歲-5歲</label><input type="number" id="f-dev-fan-5" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                       <div><label class="text-sm text-gray-600">5歲-未滿7歲</label><input type="number" id="f-dev-fan-6" class="border-2 p-1.5 w-full rounded-lg text-base text-center"></div>
+                                   </div>
+                               </div>
+                           </div>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="saveFormToMemory()" class="w-full mt-6 bg-red-600 text-white font-black text-2xl py-4 rounded-xl shadow-md hover:bg-red-700 transition">
+                    💾 儲存並將此月數據新增/更新至圖表中
+                </button>
+            </div>
+        </div>
+
+        <!-- ☁️ 【分頁：雲端匯出】 -->
+        <div id="tab-cloud" class="tab-content hidden">
+            <div class="bg-white p-6 rounded-xl shadow border max-w-3xl mx-auto mb-6">
+                <h3 class="font-black text-2xl text-gray-800 border-b-4 border-slate-200 pb-3 mb-4">📄 報表匯出（PDF）</h3>
+                <p class="text-base text-gray-600 mb-4 font-bold">依現有資料自動產生 PDF 報表，格式比照院內慣用的月報 / 季報樣式。</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-600 mb-1">季報：選擇年度／季別</label>
+                        <div class="flex gap-2">
+                            <select id="report-q-year" class="border-2 p-2 rounded-lg font-bold flex-1"></select>
+                            <select id="report-q-quarter" class="border-2 p-2 rounded-lg font-bold">
+                                <option value="Q1">第一季 (1-3月)</option>
+                                <option value="Q2">第二季 (4-6月)</option>
+                                <option value="Q3">第三季 (7-9月)</option>
+                                <option value="Q4">第四季 (10-12月)</option>
+                            </select>
+                        </div>
+                        <button onclick="exportQuarterlyReportPdf()" class="w-full mt-2 bg-indigo-700 text-white font-black py-3 rounded-lg text-base hover:bg-indigo-800 transition shadow-md">
+                            📄 匯出季報 PDF
+                        </button>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-600 mb-1">年度趨勢：選擇年度</label>
+                        <select id="report-y-year" class="border-2 p-2 rounded-lg font-bold w-full"></select>
+                        <button onclick="exportAnnualReportPdf()" class="w-full mt-2 bg-indigo-700 text-white font-black py-3 rounded-lg text-base hover:bg-indigo-800 transition shadow-md">
+                            📄 匯出年度趨勢 PDF
+                        </button>
+                    </div>
+                </div>
+                <p id="report-export-status" class="text-sm font-bold text-gray-500"></p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow border max-w-3xl mx-auto">
+                <h3 class="font-black text-2xl text-gray-800 border-b-4 border-slate-200 pb-3 mb-4">☁️ 雲端同步（Google Sheet）</h3>
+                <p class="text-base text-gray-600 mb-1 font-bold">頁面開啟時會自動從雲端讀取最新資料；管理者「儲存」月報時會自動同步寫回雲端，任何電腦重新整理即可看到最新內容。</p>
+                <p class="text-sm text-gray-500 mb-3">最後同步時間：<span id="last-sync-time" class="font-bold text-slate-700">尚未同步</span></p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+                    <button onclick="refreshFromCloud()" class="bg-emerald-700 text-white font-black py-3 rounded-lg text-base hover:bg-emerald-800 transition shadow-md">
+                        ☁️ 從雲端重新整理
+                    </button>
+                    <button onclick="manualPushToCloud()" class="bg-blue-700 text-white font-black py-3 rounded-lg text-base hover:bg-blue-800 transition shadow-md">
+                        🔄 手動同步至雲端
+                    </button>
+                    <button onclick="resetSyncKey()" class="bg-slate-600 text-white font-black py-3 rounded-lg text-base hover:bg-slate-700 transition shadow-md">
+                        🔑 更新同步金鑰
+                    </button>
+                </div>
+                <div class="h-[2px] bg-gray-200 mb-4"></div>
+                <div class="admin-only hidden bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mb-5">
+                    <p class="text-base font-black text-amber-900 mb-2">🔧 資料修復工具（僅限管理者）</p>
+                    <p class="text-sm text-gray-600 mb-3">若發現列管數計算有誤（例如公式調整後需要套用到既有資料），可按此鍵從時間軸最早一筆重新計算「全部」期別的列管數（溫/范/全科/氣喘），並同步寫回雲端。</p>
+                    <button onclick="repairAllManagedCounts()" class="w-full bg-amber-600 text-white font-black py-3 rounded-lg text-base hover:bg-amber-700 transition shadow-md">
+                        🔧 重新計算所有列管數並同步
+                    </button>
+                </div>
+                <div class="h-[2px] bg-gray-200 mb-4"></div>
+                <div class="admin-only hidden">
+                    <p class="text-base text-gray-600 mb-3 font-bold">以下為目前資料的 JSON 內容，可作為手動備份或疑難排解之用（僅限管理者查看）。</p>
+                    <textarea id="output-json-box" class="w-full border p-3 text-sm font-mono h-[350px] bg-slate-900 text-slate-100 rounded shadow-inner" readonly></textarea>
+                    <div class="mt-4 space-y-3">
+                        <button onclick="copyJsonText()" class="w-full bg-slate-800 text-white font-black py-3 rounded-lg text-lg hover:bg-slate-900 transition shadow-md">
+                            📋 複製最新 JSON 資料
+                        </button>
+                        <button onclick="importJsonText()" class="w-full bg-blue-700 text-white font-black py-3 rounded-lg text-lg hover:bg-blue-800 transition shadow-md">
+                            🔄 匯入上方 JSON 並重整圖表（記得再按「手動同步至雲端」）
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 隱藏的離屏報表畫布，用於產生 PDF（不會顯示在畫面上） -->
+    <div id="report-canvas-holder" style="position: fixed; left: -99999px; top: 0; width: 1200px; background: #ffffff;"></div>
+ 
+    <script>
+        // 初始基礎數據庫（已清空，資料改由「月報鍵入」重新輸入或由雲端同步取得）
+        let globalData = {
+          "last_updated": "",
+          "monthly_records": [
+          ]
+        };
+ 
+        let currentYear = "113年";
+        let currentMonth = "全年";
+        let permissionLevel = 'viewer'; // 'viewer' | 'user' | 'admin'
+        const USER_PASSCODE = "user-peds";
+        const MANAGER_PASSCODE = "peds-admin";
+        const STORAGE_KEY = "pediatric_quality_dashboard_data_v1";
+
+        // 🌐 Google Apps Script Web App 雲端同步設定
+        // 部署完成後，將下方網址換成您實際的 Web App 網址（.../exec 結尾）
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxA2nIZUULuYLOY9hGMsCL0Jog_adufL-YGufX7-FLkGKTKkJkNTXMugvSlpYqd6bgX/exec";
+        let syncKey = null; // 僅存在本次瀏覽器工作階段記憶體中，絕不寫入 localStorage，關閉分頁即消失
+        let lastSyncTime = null;
+
+        function setSyncStatus(state, detail) {
+            const el = document.getElementById('sync-status');
+            if (!el) return;
+            const map = {
+                syncing: { text: '雲端同步中...', stateClass: 'state-syncing' },
+                synced:  { text: '已與雲端同步', stateClass: 'state-synced' },
+                offline: { text: '離線，使用本機快取', stateClass: 'state-offline' },
+                error:   { text: '雲端同步失敗，使用本機快取', stateClass: 'state-error' }
+            };
+            const s = map[state] || map.offline;
+            el.className = "sync-badge " + s.stateClass;
+            el.innerHTML = `<span class="sync-dot"></span>${s.text}${detail ? ('（' + detail + '）') : ''}`;
+        }
+
+        function updateSyncTimeDisplay() {
+            const el = document.getElementById('last-sync-time');
+            if (el) el.innerText = lastSyncTime ? lastSyncTime.toLocaleString('zh-TW') : '尚未同步';
+        }
+
+        function isWebAppConfigured_() {
+            return WEB_APP_URL && !WEB_APP_URL.includes('PASTE_YOUR_');
+        }
+
+        // 從 Google Apps Script Web App 讀取最新資料（唯讀，任何人開啟頁面皆可執行，不需金鑰）
+        async function fetchCloudData() {
+            if (!isWebAppConfigured_()) { setSyncStatus('offline', '尚未設定雲端網址'); return null; }
+            setSyncStatus('syncing');
+            try {
+                const res = await fetch(WEB_APP_URL, { method: 'GET' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const parsed = await res.json();
+                if (!parsed || !Array.isArray(parsed.monthly_records)) throw new Error('資料格式不正確');
+                setSyncStatus('synced');
+                lastSyncTime = new Date();
+                updateSyncTimeDisplay();
+                return parsed;
+            } catch (err) {
+                console.warn('雲端讀取失敗，改用本機快取：', err);
+                setSyncStatus('error', err.message);
+                return null;
+            }
+        }
+
+        // 將目前資料寫回 Google Sheet（僅管理者，需輸入同步金鑰）
+        // 注意：以 text/plain 送出，是為了避開瀏覽器對 Apps Script Web App 的 CORS
+        // preflight（OPTIONS）限制，屬於已知且安全的標準作法；伺服器端仍會解析為 JSON。
+        async function pushCloudData() {
+            if (permissionLevel === 'viewer') return false;
+            if (!isWebAppConfigured_()) { alert('尚未設定雲端網址，請聯絡管理者完成部署設定。'); return false; }
+            if (!syncKey) {
+                const t = prompt("請輸入雲端同步金鑰（部署 Google Apps Script 時設定的 WRITE_KEY）。\n此金鑰只會保留在本次瀏覽器工作階段中，不會被儲存，關閉分頁後需重新輸入：");
+                if (!t) { alert("未輸入金鑰，本次僅儲存在本機，尚未同步至雲端。"); return false; }
+                syncKey = t.trim();
+            }
+            setSyncStatus('syncing');
+            try {
+                const res = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ key: syncKey, data: globalData })
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const result = await res.json();
+                if (!result.ok) {
+                    if (result.error === 'unauthorized') { syncKey = null; throw new Error('金鑰無效，請重新輸入'); }
+                    throw new Error(result.error || '未知錯誤');
+                }
+                setSyncStatus('synced');
+                lastSyncTime = new Date();
+                updateSyncTimeDisplay();
+                return true;
+            } catch (err) {
+                console.warn('雲端寫入失敗：', err);
+                setSyncStatus('error', err.message);
+                alert('⚠️ 寫入雲端失敗（' + err.message + '），資料已安全儲存在本機，請稍後於「☁️ 雲端匯出」頁按「手動同步至雲端」重試。');
+                return false;
+            }
+        }
+
+        window.onload = async function() {
+            loadPersistedData(); // 先讀本機快取，離線也能立即顯示上次資料
+            initYearDropdown();
+            initMonthGroup();
+            initFormSelect();
+            initReportYearSelectors();
+            updateDashboard();
+            document.getElementById('output-json-box').value = JSON.stringify(globalData, null, 2);
+
+            const cloudData = await fetchCloudData();
+            if (cloudData) {
+                globalData = cloudData;
+                persistDashboardData();
+                initYearDropdown();
+                initMonthGroup();
+                initFormSelect(); initReportYearSelectors();
+                updateDashboard();
+                document.getElementById('output-json-box').value = JSON.stringify(globalData, null, 2);
+            }
+            updateSyncTimeDisplay();
+        };
+ 
+        function loadPersistedData() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if(saved) {
+                    const parsed = JSON.parse(saved);
+                    if(parsed && Array.isArray(parsed.monthly_records)) {
+                        globalData = parsed;
+                    }
+                }
+            } catch(err) { console.warn(err); }
+        }
+ 
+        function persistDashboardData() {
+            try {
+                globalData.last_updated = new Date().toISOString().slice(0, 10);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(globalData));
+            } catch(err) { console.warn(err); }
+        }
+ 
+        function getCurrentRocYear() { return new Date().getFullYear() - 1911; }
+ 
+        // 🧠 1.下拉式選單年份加載器
+        function initYearDropdown() {
+            const select = document.getElementById('year-select');
+            let extractedYears = [...new Set(globalData.monthly_records.map(r => r.period.substring(0, 4)))];
+            if(extractedYears.length === 0) extractedYears = ["113年"];
+            
+            // 排序年份名單
+            extractedYears.sort((a, b) => parseInt(a) - parseInt(b));
+            if(!extractedYears.includes(currentYear)) currentYear = extractedYears[0];
+            
+            select.innerHTML = "";
+            extractedYears.forEach(y => {
+                select.innerHTML += `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`;
+            });
+        }
+
+        // 下拉年份選取事件
+        function selectYear(selectedVal) {
+            currentYear = selectedVal;
+            updateDashboard();
+        }
+ 
+        function initMonthGroup() {
+            const mGroup = document.getElementById('month-group');
+            mGroup.innerHTML = "";
+            for(let i=1; i<=12; i++) {
+                const mStr = `${i}月`;
+                const isActive = currentMonth === mStr;
+                mGroup.innerHTML += `<button onclick="changeMonth('${mStr}')" class="sub-month-btn ${isActive ? 'bg-blue-600 text-white font-black' : 'bg-white text-gray-700 border'} px-3 py-1 rounded-full text-sm hover:bg-gray-100 transition">${i}月</button>`;
+            }
+        }
+ 
+        function initFormSelect() {
+            const formSelect = document.getElementById('form-period');
+            const previousValue = formSelect.value;
+            formSelect.innerHTML = "";
+            let existingYearNums = globalData.monthly_records.map(r => parseInt((r.period || "").split("年")[0])).filter(n => !Number.isNaN(n));
+            const currentRocYear = getCurrentRocYear();
+            // 資料實際從111年才開始，年份選單最早只到111年（若未來有更早的資料，仍會自動往前擴充）
+            const minYearNum = existingYearNums.length > 0 ? Math.min(...existingYearNums, 111) : 111;
+            const maxExistingYearNum = existingYearNums.length > 0 ? Math.max(...existingYearNums) : currentRocYear;
+            const maxYearNum = Math.max(currentRocYear + 10, maxExistingYearNum + 10);
+            for(let y=minYearNum; y<=maxYearNum; y++) {
+                for(let m=1; m<=12; m++) {
+                    const value = `${y}年${m}月`;
+                    formSelect.innerHTML += `<option value="${value}">${value}</option>`;
+                }
+            }
+            if(previousValue && [...formSelect.options].some(o => o.value === previousValue)) { formSelect.value = previousValue; }
+        }
+
+        // 報表匯出用的年度選單（季報／年度趨勢共用邏輯）
+        function initReportYearSelectors() {
+            let existingYearNums = [...new Set(globalData.monthly_records.map(r => parseInt((r.period || "").split("年")[0])).filter(n => !Number.isNaN(n)))];
+            const currentRocYear = getCurrentRocYear();
+            if (existingYearNums.length === 0) existingYearNums = [currentRocYear];
+            existingYearNums.sort((a,b) => a-b);
+            ['report-q-year', 'report-y-year'].forEach(id => {
+                const sel = document.getElementById(id);
+                if (!sel) return;
+                const prev = sel.value;
+                sel.innerHTML = existingYearNums.map(y => `<option value="${y}年">${y}年</option>`).join('');
+                if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+                else sel.value = `${existingYearNums[existingYearNums.length-1]}年`;
+            });
+        }
+ 
+        function checkPeriodMatch(periodStr, y, mConfig) {
+            if(!periodStr.startsWith(y)) return false;
+            if(mConfig === "全年") return true;
+            let mNum = parseInt(periodStr.replace(y, '').replace('月', ''));
+            if(mConfig === "Q1") return mNum >= 1 && mNum <= 3;
+            if(mConfig === "Q2") return mNum >= 4 && mNum <= 6;
+            if(mConfig === "Q3") return mNum >= 7 && mNum <= 9;
+            if(mConfig === "Q4") return mNum >= 10 && mNum <= 12;
+            return periodStr === `${y}${mConfig}`;
+        }
+ 
+        function changeMonth(m) {
+            currentMonth = m;
+            document.querySelectorAll('.month-btn').forEach(b => b.className = "month-btn bg-white text-gray-800 font-bold px-4 py-1.5 rounded-full hover:bg-gray-100");
+            initMonthGroup();
+            if(["全年","Q1","Q2","Q3","Q4"].includes(m)) {
+                let idMap = {"全年":"m-all", "Q1":"m-q1", "Q2":"m-q2", "Q3":"m-q3", "Q4":"m-q4"};
+                document.getElementById(idMap[m]).className = "month-btn bg-blue-700 text-white font-black px-4 py-1.5 rounded-full shadow";
+            } else {
+                document.querySelectorAll('.sub-month-btn').forEach(b => {
+                    if(b.innerText === m) b.className = "sub-month-btn bg-blue-600 text-white font-black px-3 py-1 rounded-full text-sm";
+                });
+            }
+            updateDashboard();
+        }
+ 
+        // 🌟 2. 核心大重構：醫學月報時間軸「自然順序」排序器
+        function sortRecordsChronologically(recordsArray) {
+            return recordsArray.sort((a, b) => {
+                // 拆分 "113年10月" -> 年: 113, 月: 10
+                const [aYear, aMonth] = a.period.replace('月', '').split('年').map(Number);
+                const [bYear, bMonth] = b.period.replace('月', '').split('年').map(Number);
+                
+                // 先比年份，年份相同再比月份大小數字！徹底解決 10月跑到 2月前面的問題！
+                if (aYear !== bYear) {
+                    return aYear - bYear;
+                }
+                return aMonth - bMonth;
+            });
+        }
+
+        // 🌟 3. 列管數自動累計：每期＝前期列管數 + 本期收案 − 本期結案，前端不需再手動鍵入列管數。
+        // 從「本次儲存的期別」往後推算；若該期是時間軸最早一筆，前期列管數視為 0（全新起算）。
+        // 氣喘列管數公式依年份分流：113年（含以前）沿用含追蹤/年度追蹤人次的公式（已校正鎖定，重算也會得到相同結果，不會再變動）；
+        // 114年起改用單純公式（前期列管數＋新案數－結案人數，不含追蹤/年度追蹤人次）。
+        function computeAsthmaManaged_(prevManaged, record) {
+            const a = record.asthma || {};
+            const year = parseInt((record.period || '').split('年')[0]);
+            if (!Number.isNaN(year) && year <= 113) {
+                return prevManaged + (a.new_cases || 0) + (a.follow_up || 0) + (a.annual_follow_up || 0) - (a.closed_cases || 0);
+            }
+            return prevManaged + (a.new_cases || 0) - (a.closed_cases || 0);
+        }
+
+        function recalcManagedChainsFrom(editedPeriod) {
+            const records = sortRecordsChronologically(globalData.monthly_records);
+            const idx = records.findIndex(r => r.period === editedPeriod);
+            if (idx === -1 || records.length === 0) return;
+
+            const wIn = (w) => (w.general_intake != null || w.specified_intake != null) ? (w.general_intake || 0) + (w.specified_intake || 0) : (w.intake || 0);
+            const wOut = (w) => (w.general_checkout != null || w.specified_checkout != null) ? (w.general_checkout || 0) + (w.specified_checkout || 0) : (w.checkout || 0);
+
+            for (let i = idx; i < records.length; i++) {
+                const prevWen = i === 0 ? 0 : (records[i-1].specialist?.wen_detail?.managed || 0);
+                const prevFan = i === 0 ? 0 : (records[i-1].specialist?.fan_detail?.managed || 0);
+                const prevAsthma = i === 0 ? 0 : (records[i-1].asthma?.current_managed || 0);
+
+                const s = records[i].specialist || {};
+                const w = s.wen_detail || {};
+                const f = s.fan_detail || {};
+                w.managed = prevWen + wIn(w) - wOut(w);
+                f.managed = prevFan + wIn(f) - wOut(f);
+                s.wen_detail = w; s.fan_detail = f;
+                s.current_managed = w.managed + f.managed;
+                records[i].specialist = s;
+
+                const a = records[i].asthma || {};
+                a.current_managed = computeAsthmaManaged_(prevAsthma, records[i]);
+                records[i].asthma = a;
+            }
+            globalData.monthly_records = records;
+        }
+
+        // 🔧 一次性修復工具：從時間軸最早一筆開始，重新計算「全部」期別的列管數。
+        // 用於修正舊版邏輯造成的錯誤資料，或資料被手動調整過需要整體重算時使用。
+        function recalcManagedChainsAll() {
+            if (globalData.monthly_records.length === 0) return;
+            const sorted = sortRecordsChronologically(globalData.monthly_records);
+            recalcManagedChainsFrom(sorted[0].period);
+        }
+
+        function updateDashboard() {
+            // 渲染前進行自然排序
+            globalData.monthly_records = sortRecordsChronologically(globalData.monthly_records);
+
+            let filtered = globalData.monthly_records.filter(r => checkPeriodMatch(r.period, currentYear, currentMonth));
+             
+            document.getElementById('title-pie-wen').innerText = `温秀惠醫師 入院比例 (${currentYear}${currentMonth})`;
+            document.getElementById('title-pie-fan').innerText = `范揚達醫師 入院比例 (${currentYear}${currentMonth})`;
+            document.getElementById('table-title-total').innerText = `👶 幼兒專責核心指標統計表 (${currentYear}${currentMonth})`;
+            document.getElementById('table-title-asthma').innerText = `🫁 兒童氣喘品質方案：核心指標統計表 (${currentYear}${currentMonth})`;
+            document.getElementById('table-title-dev-total').innerText = `🔍 幼兒發展評估：全科與負責醫師收案績效表 (${currentYear}${currentMonth})`;
+            document.getElementById('table-title-hosp').innerText = `🏥 門急診住院量能：臨床照護統計明細表 (${currentYear}${currentMonth})`;
+ 
+            let totalHosp = 0, totalSpec = 0, totalAsthma = 0, totalDev = 0;
+            
+            filtered.forEach(r => {
+                totalHosp += (r.hospitalization?.温秀惠?.total || 0) + (r.hospitalization?.范揚達?.total || 0);
+                totalSpec += (r.specialist?.total_intake || 0); 
+                totalAsthma += (r.asthma?.new_cases || 0);     
+                totalDev += (r.development?.cases_taken || 0);  
+            });
+ 
+            document.getElementById('kpi-hosp').innerText = totalHosp.toLocaleString() + " 人";
+            document.getElementById('kpi-spec').innerText = totalSpec.toLocaleString() + " 人";
+            document.getElementById('kpi-asthma').innerText = totalAsthma.toLocaleString() + " 人";
+            document.getElementById('kpi-dev').innerText = totalDev.toLocaleString() + " 案";
+            document.getElementById('dev-total-badge').innerText = `${currentYear}${currentMonth} 收案人數：${totalDev} 人`;
+ 
+            renderAllCharts(filtered);
+            renderSpecialistTables(filtered);
+            renderAsthmaTables(filtered);
+            renderDevelopmentTables(filtered);
+            renderHospitalizationTables(filtered); 
+        }
+ 
+        function renderSpecialistTables(fData) {
+            const tbodyTotal = document.getElementById('tbody-spec-total');
+            const tbodyWen = document.getElementById('tbody-spec-wen');
+            const tbodyFan = document.getElementById('tbody-spec-fan');
+            tbodyTotal.innerHTML = ""; tbodyWen.innerHTML = ""; tbodyFan.innerHTML = "";
+            if(fData.length === 0) return;
+ 
+            let sumGIn = 0, sumSIn = 0, sumTotalIn = 0, sumGOut = 0, sumSOut = 0, sumTotalOut = 0;
+            let lastManaged = fData[fData.length - 1].specialist?.current_managed || 0;
+            let wenIn = 0, wenOut = 0, wenLastMg = fData[fData.length - 1].specialist?.wen_detail?.managed || 0;
+            let fanIn = 0, fanOut = 0, fanLastMg = fData[fData.length - 1].specialist?.fan_detail?.managed || 0;
+ 
+            fData.forEach(r => {
+                let s = r.specialist || {};
+                sumGIn += (s.general_intake || 0); sumSIn += (s.specified_intake || 0); sumTotalIn += (s.total_intake || 0);
+                sumGOut += (s.general_checkout || 0); sumSOut += (s.specified_checkout || 0); sumTotalOut += (s.total_checkout || 0);
+                let w = s.wen_detail || {};
+                wenIn += (w.general_intake != null || w.specified_intake != null) ? (w.general_intake||0)+(w.specified_intake||0) : (w.intake || 0);
+                wenOut += (w.general_checkout != null || w.specified_checkout != null) ? (w.general_checkout||0)+(w.specified_checkout||0) : (w.checkout || 0);
+                let f = s.fan_detail || {};
+                fanIn += (f.general_intake != null || f.specified_intake != null) ? (f.general_intake||0)+(f.specified_intake||0) : (f.intake || 0);
+                fanOut += (f.general_checkout != null || f.specified_checkout != null) ? (f.general_checkout||0)+(f.specified_checkout||0) : (f.checkout || 0);
+ 
+                tbodyTotal.innerHTML += `
+                    <tr>
+                        <td>${r.period}</td>
+                        <td>${s.general_intake||0}</td> <td>${s.specified_intake||0}</td> <td class="font-extrabold text-red-600">${s.total_intake||0}</td>
+                        <td>${s.general_checkout||0}</td> <td>${s.specified_checkout||0}</td> <td class="font-extrabold text-slate-700">${s.total_checkout||0}</td>
+                        <td class="bg-amber-50 font-black text-amber-800">${s.current_managed||0}</td>
+                    </tr>`;
+            });
+            if(fData.length > 1) {
+                tbodyTotal.innerHTML += `
+                    <tr class="bg-amber-100 font-black">
+                        <td>彙總</td><td>${sumGIn}</td> <td>${sumSIn}</td> <td class="text-red-700">${sumTotalIn}</td>
+                        <td>${sumGOut}</td> <td>${sumSOut}</td> <td class="text-slate-800">${sumTotalOut}</td> <td class="bg-amber-200">${lastManaged}</td>
+                    </tr>`;
+            }
+            tbodyWen.innerHTML = `<tr><td>${currentMonth}</td><td class="text-red-600">${wenIn}</td><td>${wenOut}</td><td class="bg-amber-50 text-blue-900">${wenLastMg}</td></tr>`;
+            tbodyFan.innerHTML = `<tr><td>${currentMonth}</td><td class="text-red-600">${fanIn}</td><td>${fanOut}</td><td class="bg-amber-50 text-emerald-800">${fanLastMg}</td></tr>`;
+        }
+ 
+        function renderAsthmaTables(fData) {
+            const tbodyAsthma = document.getElementById('tbody-asthma-total');
+            tbodyAsthma.innerHTML = "";
+            if(fData.length === 0) return;
+            let sumNew = 0, sumFollow = 0, sumYFollow = 0, sumClose = 0;
+            let lastManaged = fData[fData.length - 1].asthma?.current_managed || 0;
+            fData.forEach(r => {
+                let a = r.asthma || {};
+                sumNew += (a.new_cases || 0); sumFollow += (a.follow_up || 0); sumYFollow += (a.annual_follow_up || 0); sumClose += (a.closed_cases || 0);
+                tbodyAsthma.innerHTML += `
+                    <tr>
+                        <td>${r.period}</td><td class="text-red-600">${a.new_cases || 0}</td><td>${a.follow_up || 0}</td>
+                        <td>${a.annual_follow_up || 0}</td><td class="text-emerald-600">${a.closed_cases || 0}</td>
+                        <td class="bg-amber-50 font-black text-blue-800">${a.current_managed || 0}</td>
+                    </tr>`;
+            });
+            if(fData.length > 1) {
+                tbodyAsthma.innerHTML += `
+                    <tr class="bg-red-50 font-black">
+                        <td>彙總</td><td class="text-red-700">${sumNew}</td><td>${sumFollow}</td><td>${sumYFollow}</td><td class="text-emerald-700">${sumClose}</td><td class="bg-amber-200">${lastManaged}</td>
+                    </tr>`;
+            }
+        }
+ 
+        function renderDevelopmentTables(fData) {
+            const tbodyTotal = document.getElementById('tbody-dev-total');
+            const tbodyDoctors = document.getElementById('tbody-dev-doctors');
+            const tbodyAge = document.getElementById('tbody-dev-age');
+            tbodyTotal.innerHTML = ""; tbodyDoctors.innerHTML = ""; tbodyAge.innerHTML = "";
+            if(fData.length === 0) return;
+            const ageKeys = ["6to10m", "10mTo1_5y", "1_5yTo2y", "2yTo3y", "3yTo5y", "5yTo7y"];
+            let totalSeen = 0, totalTaken = 0, wenTakenSum = 0, fanTakenSum = 0;
+            let ageSums = { "6to10m":0, "10mTo1_5y":0, "1_5yTo2y":0, "2yTo3y":0, "3yTo5y":0, "5yTo7y":0 };
+            fData.forEach(r => {
+                let d = r.development || {};
+                totalSeen += (d.opd_seen || 0); totalTaken += (d.cases_taken || 0); wenTakenSum += (d.wen_cases || 0); fanTakenSum += (d.fan_cases || 0);
+                tbodyTotal.innerHTML += `<tr><td>${r.period}</td><td>${d.opd_seen||0}</td><td class="text-amber-600">${d.cases_taken||0}</td></tr>`;
+                tbodyDoctors.innerHTML += `<tr><td>${r.period}</td><td class="text-red-600 font-extrabold">${d.wen_cases||0}</td><td class="text-emerald-700 font-extrabold">${d.fan_cases||0}</td></tr>`;
+
+                let dist = d.age_distribution || {};
+                let rowTotal = 0;
+                let cells = ageKeys.map(k => { const v = dist[k]||0; ageSums[k]+=v; rowTotal+=v; return `<td>${v}</td>`; }).join('');
+                tbodyAge.innerHTML += `<tr><td>${r.period}</td>${cells}<td class="bg-amber-50 font-black text-amber-800">${rowTotal}</td></tr>`;
+            });
+            if(fData.length > 1) {
+                tbodyTotal.innerHTML = `<tr class="bg-amber-200 font-black"><td>彙總</td><td>${totalSeen}</td><td class="text-amber-700 text-lg">${totalTaken}</td></tr>` + tbodyTotal.innerHTML;
+                tbodyDoctors.innerHTML = `<tr class="bg-amber-100 font-black"><td>彙總</td><td class="text-red-700 text-lg">${wenTakenSum}</td><td class="text-emerald-800 text-lg">${fanTakenSum}</td></tr>` + tbodyDoctors.innerHTML;
+                const ageTotal = ageKeys.reduce((s,k) => s+ageSums[k], 0);
+                const ageSumCells = ageKeys.map(k => `<td>${ageSums[k]}</td>`).join('');
+                tbodyAge.innerHTML = `<tr class="bg-amber-200 font-black"><td>彙總</td>${ageSumCells}<td class="bg-amber-200 text-amber-900">${ageTotal}</td></tr>` + tbodyAge.innerHTML;
+            }
+        }
+ 
+        function renderHospitalizationTables(fData) {
+            const tbody = document.getElementById('tbody-hosp-total');
+            tbody.innerHTML = "";
+            if(fData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-gray-400 py-4">無資料</td></tr>`;
+                return;
+            }
+            let wC_sum = 0, wE_sum = 0, wT_sum = 0, fC_sum = 0, fE_sum = 0, fT_sum = 0, all_sum = 0;
+            fData.forEach(r => {
+                let w = r.hospitalization?.温秀惠 || { clinic: 0, er: 0, total: 0 };
+                let f = r.hospitalization?.范揚達 || { clinic: 0, er: 0, total: 0 };
+                wC_sum += w.clinic; wE_sum += w.er; wT_sum += w.total;
+                fC_sum += f.clinic; fE_sum += f.er; fT_sum += f.total;
+                all_sum += w.total + f.total;
+ 
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${r.period}</td>
+                        <td>${w.clinic}</td><td>${w.er}</td><td class="text-blue-700 font-black bg-blue-50">${w.total}</td>
+                        <td>${f.clinic}</td><td>${f.er}</td><td class="text-emerald-700 font-black bg-emerald-50">${f.total}</td>
+                        <td class="bg-amber-50 text-amber-900 font-black">${w.total + f.total}</td>
+                    </tr>`;
+            });
+            if(fData.length > 1) {
+                tbody.innerHTML += `
+                    <tr class="bg-amber-100 font-black">
+                        <td>彙總</td>
+                        <td>${wC_sum}</td><td>${wE_sum}</td><td class="bg-blue-100 text-blue-900">${wT_sum}</td>
+                        <td>${fC_sum}</td><td>${fE_sum}</td><td class="bg-emerald-100 text-emerald-900">${fT_sum}</td>
+                        <td class="bg-amber-200 text-amber-950">${all_sum}</td>
+                    </tr>`;
+            }
+        }
+ 
+        function updateHospTotals() {
+            const wenC = parseInt(document.getElementById('f-wen-c').value) || 0;
+            const wenE = parseInt(document.getElementById('f-wen-e').value) || 0;
+            const fanC = parseInt(document.getElementById('f-fan-c').value) || 0;
+            const fanE = parseInt(document.getElementById('f-fan-e').value) || 0;
+            document.getElementById('wen-hosp-total-display').innerText = wenC + wenE;
+            document.getElementById('fan-hosp-total-display').innerText = fanC + fanE;
+            document.getElementById('all-hosp-total-display').innerText = wenC + wenE + fanC + fanE;
+        }
+
+        function loadFormValues() {
+            const selectedPeriod = document.getElementById('form-period').value;
+            const match = globalData.monthly_records.find(r => r.period === selectedPeriod);
+            document.getElementById('f-wen-c').value = match ? match.hospitalization.温秀惠.clinic : 0;
+            document.getElementById('f-wen-e').value = match ? match.hospitalization.温秀惠.er : 0;
+            document.getElementById('f-fan-c').value = match ? (match.hospitalization.范揚達?.clinic || 0) : 0;
+            document.getElementById('f-fan-e').value = match ? (match.hospitalization.范揚達?.er || 0) : 0;
+            updateHospTotals();
+ 
+            let s = match ? (match.specialist || {}) : {};
+            let w = s.wen_detail || {};
+            let f = s.fan_detail || {};
+            document.getElementById('f-wen-g-in').value = w.general_intake || 0;
+            document.getElementById('f-wen-s-in').value = w.specified_intake || 0;
+            document.getElementById('f-wen-g-out').value = w.general_checkout || 0;
+            document.getElementById('f-wen-s-out').value = w.specified_checkout || 0;
+            document.getElementById('f-fan-g-in').value = f.general_intake || 0;
+            document.getElementById('f-fan-s-in').value = f.specified_intake || 0;
+            document.getElementById('f-fan-g-out').value = f.general_checkout || 0;
+            document.getElementById('f-fan-s-out').value = f.specified_checkout || 0;
+            document.getElementById('wen-managed-display').innerText = w.managed != null ? w.managed : '--';
+            document.getElementById('fan-managed-display').innerText = f.managed != null ? f.managed : '--';
+            document.getElementById('total-managed-display').innerText = s.current_managed != null ? s.current_managed : '--';
+ 
+            let a = match ? (match.asthma || {}) : {};
+            document.getElementById('f-asthma-new').value = a.new_cases || 0;
+            document.getElementById('f-asthma-follow').value = a.follow_up || 0;
+            document.getElementById('f-asthma-y-follow').value = a.annual_follow_up || 0;
+            document.getElementById('f-asthma-close').value = a.closed_cases || 0;
+            document.getElementById('asthma-managed-display').innerText = a.current_managed != null ? a.current_managed : '--';
+ 
+            let d = match ? (match.development || {}) : {};
+            document.getElementById('f-dev-seen').value = d.opd_seen || 0;
+            // 若尚無醫師別年齡細項紀錄（例如舊資料僅有合併年齡分佈），預設全數歸於温醫師以維持原有彙總數字不遺失
+            let wenDist = d.wen_age_distribution || (d.age_distribution ? d.age_distribution : {});
+            let fanDist = d.fan_age_distribution || {};
+            const brackets = ["6to10m", "10mTo1_5y", "1_5yTo2y", "2yTo3y", "3yTo5y", "5yTo7y"];
+            brackets.forEach((k, idx) => {
+                document.getElementById('f-dev-wen-' + (idx + 1)).value = wenDist[k] || 0;
+                document.getElementById('f-dev-fan-' + (idx + 1)).value = fanDist[k] || 0;
+            });
+        }
+ 
+        async function saveFormToMemory() {
+            if(permissionLevel === 'viewer') { alert("請先登入使用者或管理者身份。"); return; }
+            const selectedPeriod = document.getElementById('form-period').value;
+            let records = globalData.monthly_records;
+            let match = records.find(r => r.period === selectedPeriod);
+ 
+            let wenC = parseInt(document.getElementById('f-wen-c').value)||0;
+            let wenE = parseInt(document.getElementById('f-wen-e').value)||0;
+            let fanC = parseInt(document.getElementById('f-fan-c').value)||0;
+            let fanE = parseInt(document.getElementById('f-fan-e').value)||0;
+
+            let wenGIn = parseInt(document.getElementById('f-wen-g-in').value)||0;
+            let wenSIn = parseInt(document.getElementById('f-wen-s-in').value)||0;
+            let wenGOut = parseInt(document.getElementById('f-wen-g-out').value)||0;
+            let wenSOut = parseInt(document.getElementById('f-wen-s-out').value)||0;
+            let fanGIn = parseInt(document.getElementById('f-fan-g-in').value)||0;
+            let fanSIn = parseInt(document.getElementById('f-fan-s-in').value)||0;
+            let fanGOut = parseInt(document.getElementById('f-fan-g-out').value)||0;
+            let fanSOut = parseInt(document.getElementById('f-fan-s-out').value)||0;
+            // 全科數字＝温、范二位醫師自動加總，不再另外鍵入
+            let gIn = wenGIn + fanGIn, sIn = wenSIn + fanSIn;
+            let gOut = wenGOut + fanGOut, sOut = wenSOut + fanSOut;
+
+            let devSeen = parseInt(document.getElementById('f-dev-seen').value)||0;
+            const brackets = ["6to10m", "10mTo1_5y", "1_5yTo2y", "2yTo3y", "3yTo5y", "5yTo7y"];
+            let wenAgeDist = {}, fanAgeDist = {}, combinedAgeDist = {};
+            let dWen = 0, dFan = 0;
+            brackets.forEach((k, idx) => {
+                let wv = parseInt(document.getElementById('f-dev-wen-' + (idx + 1)).value)||0;
+                let fv = parseInt(document.getElementById('f-dev-fan-' + (idx + 1)).value)||0;
+                wenAgeDist[k] = wv; fanAgeDist[k] = fv; combinedAgeDist[k] = wv + fv;
+                dWen += wv; dFan += fv;
+            });
+ 
+            const newRecord = {
+                "period": selectedPeriod,
+                "hospitalization": {
+                    "温秀惠": { "clinic": wenC, "er": wenE, "total": wenC + wenE },
+                    "范揚達": { "clinic": fanC, "er": fanE, "total": fanC + fanE }
+                },
+                "asthma": { 
+                    "new_cases": parseInt(document.getElementById('f-asthma-new').value)||0, 
+                    "follow_up": parseInt(document.getElementById('f-asthma-follow').value)||0, 
+                    "annual_follow_up": parseInt(document.getElementById('f-asthma-y-follow').value)||0,
+                    "closed_cases": parseInt(document.getElementById('f-asthma-close').value)||0,
+                    "current_managed": match?.asthma?.current_managed || 0 // 實際數值由 recalcManagedChains() 自動重算
+                },
+                "specialist": { 
+                    "general_intake": gIn, "specified_intake": sIn, "total_intake": gIn + sIn,
+                    "general_checkout": gOut, "specified_checkout": sOut, "total_checkout": gOut + sOut,
+                    "current_managed": match?.specialist?.current_managed || 0, // 由 recalcManagedChains() 自動重算
+                    "wen_detail": { "general_intake": wenGIn, "specified_intake": wenSIn, "general_checkout": wenGOut, "specified_checkout": wenSOut, "managed": match?.specialist?.wen_detail?.managed || 0 },
+                    "fan_detail": { "general_intake": fanGIn, "specified_intake": fanSIn, "general_checkout": fanGOut, "specified_checkout": fanSOut, "managed": match?.specialist?.fan_detail?.managed || 0 }
+                },
+                "development": {
+                    "opd_seen": devSeen,
+                    "cases_taken": dWen + dFan, "wen_cases": dWen, "fan_cases": dFan,
+                    "wen_age_distribution": wenAgeDist, "fan_age_distribution": fanAgeDist,
+                    "age_distribution": combinedAgeDist
+                }
+            };
+ 
+            if (match) { Object.assign(match, newRecord); } else { records.push(newRecord); }
+            
+            // 儲存前用全新的醫報自然排序法，確保 1~12 月不會打亂[cite: 1]！
+            globalData.monthly_records = sortRecordsChronologically(globalData.monthly_records);
+            // 僅從本次儲存的期別開始，往後自動推算列管數（温/范/全科/氣喘），不動更早期別
+            recalcManagedChainsFrom(selectedPeriod);
+            
+            persistDashboardData();
+            document.getElementById('output-json-box').value = JSON.stringify(globalData, null, 2);
+            initYearDropdown(); // 同步重置年份選單名單[cite: 1]
+            initFormSelect(); initReportYearSelectors();
+            updateDashboard();
+            loadFormValues(); // 重新顯示自動計算後的列管數
+
+            const pushed = await pushCloudData();
+            if (pushed) {
+                alert("成功！已儲存並同步至雲端，其他電腦重新整理即可看到最新資料。");
+            } else {
+                alert("已儲存在本機，但尚未同步至雲端，請於「☁️ 雲端匯出」頁重試同步。");
+            }
+        }
+ 
+        function copyJsonText() {
+            const box = document.getElementById('output-json-box'); box.select(); document.execCommand('copy'); alert('複製成功！');
+        }
+ 
+        async function refreshFromCloud() {
+            const cloudData = await fetchCloudData();
+            if (cloudData) {
+                globalData = cloudData;
+                persistDashboardData();
+                initYearDropdown(); initMonthGroup(); initFormSelect(); initReportYearSelectors(); updateDashboard();
+                document.getElementById('output-json-box').value = JSON.stringify(globalData, null, 2);
+                alert("已從雲端重新整理最新資料！");
+            } else {
+                alert("雲端讀取失敗，目前顯示的是本機快取資料。");
+            }
+        }
+ 
+        async function manualPushToCloud() {
+            if(permissionLevel === 'viewer') { alert("請先登入使用者或管理者身份。"); return; }
+            const pushed = await pushCloudData();
+            if (pushed) alert("同步成功！");
+        }
+ 
+        async function repairAllManagedCounts() {
+            if(permissionLevel !== 'admin') { alert("此功能僅限管理者使用。"); return; }
+            if(globalData.monthly_records.length === 0) { alert("目前沒有任何資料可供重新計算。"); return; }
+            if(!confirm("即將依時間軸重新計算「全部」期別的列管數（溫/范/全科/氣喘），並同步寫回雲端，確定要執行嗎？")) return;
+            recalcManagedChainsAll();
+            persistDashboardData();
+            document.getElementById('output-json-box').value = JSON.stringify(globalData, null, 2);
+            updateDashboard();
+            const pushed = await pushCloudData();
+            if (pushed) {
+                alert("重新計算完成，已同步至雲端！");
+            } else {
+                alert("重新計算已套用在本機，但尚未同步至雲端，請按「手動同步至雲端」重試。");
+            }
+        }
+
+        function resetSyncKey() {
+            if(permissionLevel === 'viewer') { alert("請先登入使用者或管理者身份。"); return; }
+            syncKey = null;
+            alert("已清除本次工作階段的同步金鑰，下次同步時會重新詢問。");
+        }
+ 
+        function importJsonText() {
+            if(permissionLevel !== 'admin') { alert("此功能僅限管理者使用。"); return; }
+            try {
+                const parsed = JSON.parse(document.getElementById('output-json-box').value);
+                if(parsed && Array.isArray(parsed.monthly_records)) {
+                    globalData = parsed; persistDashboardData(); initYearDropdown(); initMonthGroup(); initFormSelect(); initReportYearSelectors(); updateDashboard();
+                    alert("匯入成功！若要讓其他電腦也看到，請記得按「手動同步至雲端」。");
+                }
+            } catch(e) { alert("解析失敗"); }
+        }
+ 
+        function applyAdminOnlyVisibility() {
+            const isAdmin = permissionLevel === 'admin';
+            document.querySelectorAll('.admin-only').forEach(el => {
+                el.classList.toggle('hidden', !isAdmin);
+            });
+        }
+
+        function toggleMode() {
+            const btn = document.getElementById('btn-mode-toggle');
+            const tabLink = document.getElementById('tab-input-link');
+            const cloudLink = document.getElementById('tab-cloud-link');
+            if (permissionLevel === 'viewer') {
+                const pass = prompt("請輸入密碼登入（使用者／管理者）：");
+                if (pass === null) return;
+                if (pass === MANAGER_PASSCODE) {
+                    permissionLevel = 'admin';
+                } else if (pass === USER_PASSCODE) {
+                    permissionLevel = 'user';
+                } else {
+                    alert("密碼錯誤！");
+                    return;
+                }
+                const roleLabel = permissionLevel === 'admin' ? '管理者' : '使用者';
+                btn.innerText = `登出（${roleLabel}）`;
+                btn.className = "bg-red-600 text-white text-base font-black px-5 py-2 rounded shadow-md border-2 border-red-300 hover:bg-red-700 transition";
+                tabLink.classList.remove('hidden'); cloudLink.classList.remove('hidden');
+                applyAdminOnlyVisibility();
+                switchTab('tab-input'); loadFormValues();
+            } else {
+                permissionLevel = 'viewer';
+                btn.innerText = "登入";
+                btn.className = "bg-white text-blue-900 text-base font-black px-5 py-2 rounded shadow-md hover:bg-amber-100 border-2 border-amber-400 transition";
+                tabLink.classList.add('hidden'); cloudLink.classList.add('hidden');
+                applyAdminOnlyVisibility();
+                switchTab('tab-overview');
+            }
+        }
+ 
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => { el.classList.remove('block'); el.classList.add('hidden'); });
+            document.getElementById(tabId).classList.replace('hidden', 'block');
+            document.querySelectorAll('.tab-link').forEach(el => el.className = "tab-link border-b-4 border-transparent text-gray-600 hover:text-blue-700 py-4 px-2");
+            // 上一行會重設所有分頁按鈕的 class，因此權限受限的分頁（月報鍵入／雲端匯出）
+            // 需要在這裡依目前登入狀態重新套用隱藏樣式，避免登出後分頁又跑出來
+            if (permissionLevel === 'viewer') {
+                document.getElementById('tab-input-link').classList.add('hidden');
+                document.getElementById('tab-cloud-link').classList.add('hidden');
+            }
+            
+            let activeId = "t-overview";
+            if(tabId === "tab-hosp") activeId = "t-hosp";
+            if(tabId === "tab-specialist") activeId = "t-specialist";
+            if(tabId === "tab-asthma") activeId = "t-asthma";
+            if(tabId === "tab-dev") activeId = "t-dev";
+            if(tabId === "tab-input") activeId = "tab-input-link";
+            if(tabId === "tab-cloud") activeId = "tab-cloud-link";
+            
+            let borderClass = "border-blue-700 text-blue-700";
+            if(tabId === "tab-specialist") borderClass = "border-red-600 text-red-600";
+            if(tabId === "tab-asthma") borderClass = "border-teal-600 text-teal-600";
+            if(tabId === "tab-dev") borderClass = "border-amber-600 text-amber-600";
+            if(tabId === "tab-input") borderClass = "text-red-600 border-red-600";
+            if(tabId === "tab-cloud") borderClass = "text-slate-800 border-slate-600";
+            
+            document.getElementById(activeId).className = "tab-link border-b-4 " + borderClass;
+            setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 60);
+        }
+ 
+        const PROJECTION_FONT = '"Inter", "Roboto", "Helvetica", "Source Han Sans TC", "Microsoft JhengHei", sans-serif';
+        const AXIS_LABEL_STYLE = { fontFamily: PROJECTION_FONT, fontSize: 16, fontWeight: 'bold', color: '#000000' };
+        const LEGEND_TEXT_STYLE = { fontFamily: PROJECTION_FONT, fontSize: 16, fontWeight: 'bold', color: '#000000' };
+        const LABEL_STYLE_WHITE = { show: true, position: 'inside', fontFamily: PROJECTION_FONT, fontSize: 15, fontWeight: '900', color: '#FFFFFF', formatter: function(p){ return p.value > 0 ? p.value : ''; } }; 
+        const LABEL_STYLE_TOP = { show: true, position: 'top', fontFamily: PROJECTION_FONT, fontSize: 15, fontWeight: '900', color: '#000000', formatter: '{c}' };
+ 
+        let c_h_m, c_d_m, c_h_d, c_h_p_w, c_h_p_f, c_s_d, c_a_d, c_d_d, c_dev_pie, c_spec_m, c_asthma_m; 
+         
+        function renderAllCharts(fData) {
+            const labelPeriods = fData.map(r => r.period);
+ 
+            // 1. 總覽：住院量（門診/急診 X 醫師堆疊）
+            const hospOverview = { wenClinic: 0, wenEr: 0, fanClinic: 0, fanEr: 0 };
+            fData.forEach(r => {
+                hospOverview.wenClinic += (r.hospitalization?.温秀惠?.clinic || 0); hospOverview.wenEr += (r.hospitalization?.温秀惠?.er || 0);
+                hospOverview.fanClinic += (r.hospitalization?.范揚達?.clinic || 0); hospOverview.fanEr += (r.hospitalization?.范揚達?.er || 0);
+            });
+            if(!c_h_m) c_h_m = echarts.init(document.getElementById('c-hosp-main'));
+            c_h_m.setOption({
+                title: { text: '🏥 1. 兒科住院人次（來源 × 醫師堆疊）', textStyle: {fontSize: 18, fontWeight: 'bold'} },
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { data: ['温秀惠醫師', '范揚達醫師'], textStyle: LEGEND_TEXT_STYLE, bottom: 0 },
+                xAxis: { type: 'category', data: ['門診', '急診'], axisLabel: AXIS_LABEL_STYLE },
+                yAxis: { type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 },
+                series: [
+                    { name: '温秀惠醫師', type: 'bar', stack: 'h', color: '#0066cc', barWidth: 85, label: LABEL_STYLE_WHITE, data: [hospOverview.wenClinic, hospOverview.wenEr] },
+                    { name: '范揚達醫師', type: 'bar', stack: 'h', color: '#00aa55', barWidth: 85, label: LABEL_STYLE_WHITE, data: [hospOverview.fanClinic, hospOverview.fanEr] }
+                ]
+            });
+ 
+            // 2. 總覽：專責
+            if(!c_spec_m) c_spec_m = echarts.init(document.getElementById('c-spec-main-panel'));
+            c_spec_m.setOption({
+                title: { text: '👶 2. 幼兒專責新案量指標', textStyle: {fontSize: 18, fontWeight: 'bold'} },
+                tooltip: { trigger: 'axis' }, legend: { textStyle: LEGEND_TEXT_STYLE, bottom: 0 },
+                xAxis: { type: 'category', data: labelPeriods, axisLabel: AXIS_LABEL_STYLE },
+                yAxis: [{ type: 'value', name: '新收案人數', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 }, { type: 'value', name: '期末列管總數', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 }],
+                series: [
+                    { name: '總收案數', type: 'bar', color: '#dc2626', data: fData.map(r => r.specialist?.total_intake || 0) }, 
+                    { name: '期末列管數', type: 'line', yAxisIndex: 1, smooth: true, lineStyle: {width: 5}, color: '#1d4ed8', data: fData.map(r => r.specialist?.current_managed || 0) } 
+                ]
+            });
+ 
+            // 3. 總覽：氣喘
+            if(!c_asthma_m) c_asthma_m = echarts.init(document.getElementById('c-asthma-main-panel'));
+            c_asthma_m.setOption({
+                title: { text: '🫁 3. 氣喘方案管理趨勢', textStyle: {fontSize: 18, fontWeight: 'bold'} },
+                tooltip: { trigger: 'axis' }, legend: { textStyle: LEGEND_TEXT_STYLE, bottom: 0 },
+                xAxis: { type: 'category', data: labelPeriods, axisLabel: AXIS_LABEL_STYLE },
+                yAxis: [{ type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 }, { type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 }],
+                series: [
+                    { name: '新案數', type: 'bar', color: '#dc2626', data: fData.map(r => r.asthma?.new_cases || 0) },
+                    { name: '期末列管數', type: 'line', yAxisIndex: 1, smooth: true, lineStyle: {width: 5}, color: '#1d4ed8', data: fData.map(r => r.asthma?.current_managed || 0) }
+                ]
+            });
+ 
+            // 4. 總覽：發展
+            if(!c_d_m) c_d_m = echarts.init(document.getElementById('c-dev-main'));
+            const overviewAgeSums = { "6to10m": 0, "10mTo1_5y": 0, "1_5yTo2y": 0, "2yTo3y": 0, "3yTo5y": 0, "5yTo7y": 0 };
+            fData.forEach(r => {
+                let dist = r.development?.age_distribution || {};
+                Object.keys(overviewAgeSums).forEach(k => { overviewAgeSums[k] += (dist[k] || 0); });
+            });
+            c_d_m.setOption({
+                title: { text: '🔍 4. 發展評估：年齡別案件分佈', textStyle: {fontSize: 18, fontWeight: 'bold'} },
+                tooltip: { trigger: 'axis' },
+                grid: { left: '4%', right: '4%', bottom: '18%', top: '18%', containLabel: true },
+                xAxis: { type: 'category', data: ['6-10月', '10月-1.5歲', '1.5-2歲', '2-3歲', '3-5歲', '5-7歲'], axisLabel: { ...AXIS_LABEL_STYLE, interval: 0, rotate: 30 } },
+                yAxis: { type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 },
+                series: [{ type: 'bar', label: LABEL_STYLE_TOP, data: [
+                    { value: overviewAgeSums["6to10m"], itemStyle: { color: '#5b9bd5' } },
+                    { value: overviewAgeSums["10mTo1_5y"], itemStyle: { color: '#b00000' } },
+                    { value: overviewAgeSums["1_5yTo2y"], itemStyle: { color: '#00b050' } },
+                    { value: overviewAgeSums["2yTo3y"], itemStyle: { color: '#ffc000' } },
+                    { value: overviewAgeSums["3yTo5y"], itemStyle: { color: '#7030a0' } },
+                    { value: overviewAgeSums["5yTo7y"], itemStyle: { color: '#f48024' } }
+                ] }]
+            });
+ 
+            // 5. 單項：門急診並排圖
+            if(!c_h_d) c_h_d = echarts.init(document.getElementById('c-hosp-detail'));
+            let w_clinic = [], w_er = [], f_clinic = [], f_er = [];
+            fData.forEach(r => {
+                w_clinic.push(r.hospitalization?.温秀惠?.clinic || 0); w_er.push(r.hospitalization?.温秀惠?.er || 0);
+                f_clinic.push(r.hospitalization?.范揚達?.clinic || 0); f_er.push(r.hospitalization?.范揚達?.er || 0);
+            });
+            c_h_d.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { show: false },
+                grid: { left: '4%', right: '4%', bottom: '10%', top: '6%', containLabel: true },
+                xAxis: { type: 'category', data: labelPeriods, axisLabel: AXIS_LABEL_STYLE },
+                yAxis: { type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 },
+                series: [
+                    { name: '温秀惠醫師：門診', type: 'bar', stack: 'wen_stack', color: '#0066cc', label: LABEL_STYLE_WHITE, barMaxWidth: 50, data: w_clinic },
+                    { name: '温秀惠醫師：急診', type: 'bar', stack: 'wen_stack', color: '#cc0022', label: LABEL_STYLE_WHITE, data: w_er },
+                    { name: '范揚達醫師：門診', type: 'bar', stack: 'fan_stack', color: '#00aa55', label: LABEL_STYLE_WHITE, barMaxWidth: 50, data: f_clinic },
+                    { name: '范揚達醫師：急診', type: 'bar', stack: 'fan_stack', color: '#ffaa00', label: LABEL_STYLE_WHITE, data: f_er }
+                ]
+            });
+ 
+            // 圓餅圖
+            let wClinicSum = 0, wErSum = 0, fClinicSum = 0, fErSum = 0;
+            fData.forEach(r => {
+                wClinicSum += (r.hospitalization?.温秀惠?.clinic || 0); wErSum += (r.hospitalization?.温秀惠?.er || 0);
+                fClinicSum += (r.hospitalization?.范揚達?.clinic || 0); fErSum += (r.hospitalization?.范揚達?.er || 0);
+            });
+            if(!c_h_p_w) c_h_p_w = echarts.init(document.getElementById('c-hosp-pie-wen'));
+            c_h_p_w.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c}人 ({d}%)' }, legend: { bottom: 0, textStyle: LEGEND_TEXT_STYLE },
+                series: [{ type: 'pie', radius: '65%', color: ['#0066cc', '#cc0022'], label: { show: (wClinicSum+wErSum>0), position: 'inside', formatter: '{b}\n{d}%', textStyle: {fontSize: 16, fontWeight: '900', color: '#fff'} }, data: [{ value: wClinicSum, name: '門診' }, { value: wErSum, name: '急診' }] }]
+            });
+            if(!c_h_p_f) c_h_p_f = echarts.init(document.getElementById('c-hosp-pie-fan'));
+            c_h_p_f.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c}人 ({d}%)' }, legend: { bottom: 0, textStyle: LEGEND_TEXT_STYLE },
+                series: [{ type: 'pie', radius: '65%', color: ['#00aa55', '#ffaa00'], label: { show: (fClinicSum+fErSum>0), position: 'inside', formatter: '{b}\n{d}%', textStyle: {fontSize: 16, fontWeight: '900', color: '#fff'} }, data: [{ value: fClinicSum, name: '門診' }, { value: fErSum, name: '急診' }] }]
+            });
+ 
+            // 幼兒專責詳細頁
+            if(!c_s_d) c_s_d = echarts.init(document.getElementById('c-spec-detail'));
+            c_s_d.setOption({ 
+                tooltip: { trigger: 'axis' }, legend: { textStyle: LEGEND_TEXT_STYLE }, xAxis: { type: 'category', data: labelPeriods, axisLabel: AXIS_LABEL_STYLE }, yAxis: [{ type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 }, { type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 }], 
+                series: [
+                    { name: '一般收案', type: 'bar', stack: 'in', color: '#f87171', data: fData.map(r => r.specialist?.general_intake || 0) },
+                    { name: '指定收案', type: 'bar', stack: 'in', color: '#b91c1c', data: fData.map(r => r.specialist?.specified_intake || 0) },
+                    { name: '當月總列管數', type: 'line', yAxisIndex: 1, symbolSize: 10, lineStyle: {width: 4}, color: '#1d4ed8', data: fData.map(r => r.specialist?.current_managed || 0) }
+                ] 
+            });
+ 
+            // 氣喘詳細頁
+            if(!c_a_d) c_a_d = echarts.init(document.getElementById('c-asthma-detail'));
+            c_a_d.setOption({ 
+                tooltip: { trigger: 'axis' }, legend: { textStyle: LEGEND_TEXT_STYLE }, xAxis: { type: 'category', data: labelPeriods, axisLabel: AXIS_LABEL_STYLE }, yAxis: [{ type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 }, { type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 }], 
+                series: [
+                    { name: '新案', type: 'bar', color: '#dc2626', data: fData.map(r => r.asthma?.new_cases || 0) },
+                    { name: '追蹤', type: 'bar', color: '#f97316', data: fData.map(r => r.asthma?.follow_up || 0) },
+                    { name: '總列管數', type: 'line', yAxisIndex: 1, symbolSize: 10, lineStyle: {width: 4}, color: '#1d4ed8', data: fData.map(r => r.asthma?.current_managed || 0) }
+                ] 
+            });
+ 
+            // 發展評估詳細頁
+            if(!c_d_d) c_d_d = echarts.init(document.getElementById('c-dev-detail'));
+            c_d_d.setOption({ tooltip: { trigger: 'axis' }, legend: { textStyle: {fontSize: 13, fontWeight: 'bold'} }, xAxis: { type: 'category', data: labelPeriods, axisLabel: {fontSize: 13, fontWeight: 'bold'} }, yAxis: { type: 'value', minInterval: 1 }, series: [{ name: '温秀惠', type: 'bar', color: '#ef4444', data: fData.map(r => r.development?.wen_cases || 0) }, { name: '范揚達', type: 'bar', color: '#1d4ed8', data: fData.map(r => r.development?.fan_cases || 0) }] });
+ 
+            let ageSums = { "6to10m": 0, "10mTo1_5y": 0, "1_5yTo2y": 0, "2yTo3y": 0, "3yTo5y": 0, "5yTo7y": 0 };
+            fData.forEach(r => {
+                let dist = r.development?.age_distribution || {};
+                Object.keys(ageSums).forEach(k => { ageSums[k] += (dist[k] || 0); });
+            });
+            if(!c_dev_pie) c_dev_pie = echarts.init(document.getElementById('c-dev-age-pie'));
+            c_dev_pie.setOption({ tooltip: { trigger: 'item', formatter: '{b}: {c}人 ({d}%)' }, legend: { top: 0, textStyle: LEGEND_TEXT_STYLE }, series: [{ type: 'pie', radius: '55%', center: ['50%', '58%'], color: ['#5b9bd5', '#b00000', '#00b050', '#ffc000', '#7030a0', '#f48024'], label: { show: true, formatter: '{b}\n{c}人 ({d}%)', textStyle: {fontSize: 14, fontWeight: 'bold', color: '#000'} }, labelLine: { length: 14, length2: 10 }, data: [{ value: ageSums["6to10m"], name: '6至10個月' }, { value: ageSums["10mTo1_5y"], name: '10個月-1歲半' }, { value: ageSums["1_5yTo2y"], name: '1歲半-2歲' }, { value: ageSums["2yTo3y"], name: '2歲-3歲' }, { value: ageSums["3yTo5y"], name: '3歲-5歲' }, { value: ageSums["5yTo7y"], name: '5歲-未滿7歲' }] }] });
+        }
+ 
+        window.addEventListener('resize', () => {
+            if(c_h_m) c_h_m.resize(); if(c_spec_m) c_spec_m.resize(); if(c_asthma_m) c_asthma_m.resize(); if(c_d_m) c_d_m.resize(); if(c_h_d) c_h_d.resize();
+            if(c_h_p_w) c_h_p_w.resize(); if(c_h_p_f) c_h_p_f.resize(); if(c_s_d) c_s_d.resize(); if(c_a_d) c_a_d.resize(); if(c_d_d) c_d_d.resize(); if(c_dev_pie) c_dev_pie.resize();
+        });
+
+        // ========================= 📄 PDF 報表匯出模組 =========================
+        function shadeColor(hex, factor) {
+            hex = hex.replace('#', '');
+            const r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+            const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
+            return `rgb(${clamp(r*factor)},${clamp(g*factor)},${clamp(b*factor)})`;
+        }
+
+        // 立體堆疊柱狀圖（前面／側面／頂面三個面模擬 3D 效果）
+        function build3DStackedBarSVG(columns, opts) {
+            opts = Object.assign({ width: 1100, height: 480, depthX: 18, depthY: 22, barWidth: 68, gap: 34, maxValue: null, marginLeft: 55, marginRight: 40, marginBottom: 78, marginTop: 25, groupSize: 1, groupGap: 0 }, opts || {});
+            const { width, height, depthX, depthY, barWidth, gap, marginLeft, marginRight, marginBottom, marginTop, groupSize, groupGap } = opts;
+            const plotHeight = height - marginTop - marginBottom;
+            const plotWidth = width - marginLeft - marginRight - depthX;
+            let maxValue = opts.maxValue;
+            if (!maxValue) {
+                maxValue = 0;
+                columns.forEach(c => { const t = c.segments.reduce((s,x)=>s+x.value,0); if (t > maxValue) maxValue = t; });
+                maxValue = Math.ceil((maxValue * 1.15) / 10) * 10 || 10;
+            }
+            const scaleY = plotHeight / maxValue;
+            const baseY = marginTop + plotHeight;
+            let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft JhengHei','Source Han Sans TC',sans-serif">`;
+            const ticks = 7;
+            for (let t = 0; t <= ticks; t++) {
+                const val = Math.round(maxValue / ticks * t);
+                const y = baseY - val * scaleY;
+                svg += `<line x1="${marginLeft}" y1="${y}" x2="${width-marginRight}" y2="${y}" stroke="#e2e8f0" stroke-width="1"/>`;
+                svg += `<text x="${marginLeft-10}" y="${y+5}" font-size="15" text-anchor="end" fill="#334155">${val}</text>`;
+            }
+            const numGroups = Math.ceil(columns.length / groupSize);
+            const totalColsWidth = columns.length * (barWidth + gap) - gap + (numGroups > 1 ? (numGroups - 1) * groupGap : 0);
+            const startX = marginLeft + Math.max(0, (plotWidth - totalColsWidth) / 2);
+            const xPositions = [];
+            let curX = startX;
+            columns.forEach((col, idx) => {
+                if (idx > 0 && idx % groupSize === 0) curX += groupGap;
+                xPositions.push(curX);
+                curX += barWidth + gap;
+            });
+            columns.forEach((col, idx) => {
+                const colX = xPositions[idx];
+                let cumBottom = baseY;
+                const textsToRender = [];
+                col.segments.forEach(seg => {
+                    if (seg.value <= 0) return;
+                    const segH = seg.value * scaleY;
+                    const cumTop = cumBottom - segH;
+                    svg += `<rect x="${colX}" y="${cumTop}" width="${barWidth}" height="${segH}" fill="${seg.color}"/>`;
+                    svg += `<polygon points="${colX+barWidth},${cumTop} ${colX+barWidth+depthX},${cumTop-depthY} ${colX+barWidth+depthX},${cumBottom-depthY} ${colX+barWidth},${cumBottom}" fill="${shadeColor(seg.color,0.62)}"/>`;
+                    const labelY = segH >= 16 ? (cumTop+segH/2+6) : (cumTop-6);
+                    textsToRender.push(`<text x="${colX+barWidth/2}" y="${labelY}" font-size="17" font-weight="900" text-anchor="middle" fill="#ffffff" stroke="${seg.color}" stroke-width="3" paint-order="stroke">${seg.value}</text>`);
+                    cumBottom = cumTop;
+                });
+                const colTotal = col.segments.reduce((s,x)=>s+x.value,0);
+                if (colTotal > 0) {
+                    const topY = baseY - colTotal * scaleY;
+                    const topColor = [...col.segments].reverse().find(s=>s.value>0)?.color || '#94a3b8';
+                    svg += `<polygon points="${colX},${topY} ${colX+depthX},${topY-depthY} ${colX+barWidth+depthX},${topY-depthY} ${colX+barWidth},${topY}" fill="${shadeColor(topColor,1.25)}"/>`;
+                }
+                // 數字標籤一律最後繪製，確保不會被立體頂蓋或側面覆蓋
+                svg += textsToRender.join('');
+                if (col.label) svg += `<text x="${colX+barWidth/2}" y="${baseY+26}" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">${col.label}</text>`;
+                if (groupSize <= 1 && col.subLabel) svg += `<text x="${colX+barWidth/2}" y="${baseY+50}" font-size="17" font-weight="900" text-anchor="middle" fill="#1e293b">${col.subLabel}</text>`;
+            });
+            // 分組標籤（例如月份）：每組只顯示一次，置中在該組所有柱子下方，不逐柱重複
+            if (groupSize > 1) {
+                for (let g = 0; g < columns.length; g += groupSize) {
+                    const groupCols = columns.slice(g, g + groupSize);
+                    if (groupCols.length === 0 || !groupCols[0].subLabel) continue;
+                    const firstX = xPositions[g];
+                    const lastX = xPositions[g + groupCols.length - 1] + barWidth;
+                    const midX = (firstX + lastX) / 2;
+                    svg += `<text x="${midX}" y="${baseY+50}" font-size="17" font-weight="900" text-anchor="middle" fill="#1e293b">${groupCols[0].subLabel}</text>`;
+                }
+            }
+            svg += `<line x1="${marginLeft}" y1="${baseY}" x2="${width-marginRight}" y2="${baseY}" stroke="#475569" stroke-width="2"/>`;
+            svg += `</svg>`;
+            return svg;
+        }
+
+        // 立體圓餅圖（頂面圓餅切片 + 底部弧形側壁模擬 3D 圓柱效果），僅適用 2 個以上分類
+        function build3DPieSVG(slices, opts) {
+            opts = Object.assign({ width: 480 }, opts || {});
+            const scale = opts.width / 480;
+            const rx = 165 * scale, ry = 82 * scale, depth = 36 * scale;
+            const cx = opts.width / 2, cy = rx;
+            const legendH = 55 * scale;
+            const height = cy + ry + depth + 20 * scale;
+            const fPct = Math.max(14, Math.round(22 * scale));
+            const fLegend = Math.max(12, Math.round(17 * scale));
+            const total = slices.reduce((s,x)=>s+x.value,0) || 1;
+            const toRad = d => d * Math.PI / 180;
+            let cum = 0;
+            const withAngles = slices.map(s => {
+                const span = (s.value / total) * 360;
+                const a0 = cum, a1 = cum + span;
+                cum = a1;
+                return Object.assign({}, s, { a0, a1, pct: Math.round((s.value/total)*100) });
+            });
+            let svg = `<svg width="${opts.width}" height="${height+legendH}" viewBox="0 0 ${opts.width} ${height+legendH}" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft JhengHei','Source Han Sans TC',sans-serif">`;
+            withAngles.forEach(s => {
+                const lo = Math.max(s.a0, 0), hi = Math.min(s.a1, 180);
+                if (hi <= lo) return;
+                const steps = 14;
+                let path = '';
+                for (let i=0;i<=steps;i++) {
+                    const a = lo + (hi-lo)*i/steps;
+                    const x = cx + rx*Math.cos(toRad(a)), y = cy + ry*Math.sin(toRad(a));
+                    path += (i===0?'M':'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+                }
+                for (let i=steps;i>=0;i--) {
+                    const a = lo + (hi-lo)*i/steps;
+                    const x = cx + rx*Math.cos(toRad(a)), y = cy + ry*Math.sin(toRad(a)) + depth;
+                    path += 'L' + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+                }
+                path += 'Z';
+                svg += `<path d="${path}" fill="${shadeColor(s.color,0.6)}"/>`;
+            });
+            withAngles.forEach(s => {
+                const x0 = cx + rx*Math.cos(toRad(s.a0)), y0 = cy + ry*Math.sin(toRad(s.a0));
+                const x1 = cx + rx*Math.cos(toRad(s.a1)), y1 = cy + ry*Math.sin(toRad(s.a1));
+                const largeArc = (s.a1 - s.a0) > 180 ? 1 : 0;
+                const path = `M${cx},${cy} L${x0.toFixed(1)},${y0.toFixed(1)} A${rx},${ry} 0 ${largeArc} 1 ${x1.toFixed(1)},${y1.toFixed(1)} Z`;
+                svg += `<path d="${path}" fill="${s.color}" stroke="#ffffff" stroke-width="1.5"/>`;
+                const midA = (s.a0 + s.a1) / 2;
+                const lx = cx + rx*0.6*Math.cos(toRad(midA)), ly = cy + ry*0.6*Math.sin(toRad(midA));
+                if (s.pct > 0) svg += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" font-size="${fPct}" font-weight="900" text-anchor="middle" fill="#ffffff">${s.pct}%</text>`;
+            });
+            let lx = cx - (slices.length * 90 * scale) / 2;
+            slices.forEach(s => {
+                svg += `<rect x="${lx}" y="${height+18*scale}" width="${18*scale}" height="${18*scale}" fill="${s.color}"/>`;
+                svg += `<text x="${lx+24*scale}" y="${height+33*scale}" font-size="${fLegend}" font-weight="700" fill="#1e293b">${s.label}</text>`;
+                lx += 95 * scale;
+            });
+            svg += `</svg>`;
+            return svg;
+        }
+
+        // 長條圖（新案數）+ 折線圖（列管數）雙軸組合圖
+        function buildComboBarLineSVG(labels, barValues, lineValues, barColor, lineColor, opts) {
+            opts = Object.assign({ width: 1100, height: 420, marginLeft: 55, marginRight: 60, marginTop: 25, marginBottom: 60, barWidth: 44 }, opts || {});
+            const { width, height, marginLeft, marginRight, marginTop, marginBottom, barWidth } = opts;
+            const plotW = width - marginLeft - marginRight;
+            const plotH = height - marginTop - marginBottom;
+            const maxBar = Math.max(Math.ceil((Math.max(...barValues, 1)) * 1.25), 5);
+            const maxLine = Math.max(Math.ceil((Math.max(...lineValues, 1) * 1.15) / 10) * 10, 10);
+            const n = labels.length;
+            const step = plotW / n;
+            const baseY = marginTop + plotH;
+            let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft JhengHei','Source Han Sans TC',sans-serif">`;
+            const ticks = 5;
+            for (let t = 0; t <= ticks; t++) {
+                const y = baseY - (plotH / ticks * t);
+                svg += `<line x1="${marginLeft}" y1="${y}" x2="${width-marginRight}" y2="${y}" stroke="#e2e8f0" stroke-width="1"/>`;
+                svg += `<text x="${marginLeft-10}" y="${y+5}" font-size="14" text-anchor="end" fill="${barColor}">${Math.round(maxBar/ticks*t)}</text>`;
+                svg += `<text x="${width-marginRight+10}" y="${y+5}" font-size="14" text-anchor="start" fill="${lineColor}">${Math.round(maxLine/ticks*t)}</text>`;
+            }
+            labels.forEach((lab, i) => {
+                const cx = marginLeft + step*i + step/2;
+                const v = barValues[i] || 0;
+                const h = (v/maxBar) * plotH;
+                svg += `<rect x="${cx-barWidth/2}" y="${baseY-h}" width="${barWidth}" height="${h}" fill="${barColor}"/>`;
+                if (v > 0) svg += `<text x="${cx}" y="${baseY-h-8}" font-size="14" font-weight="900" text-anchor="middle" fill="${barColor}">${v}</text>`;
+                svg += `<text x="${cx}" y="${baseY+24}" font-size="14" font-weight="700" text-anchor="middle" fill="#1e293b">${lab}</text>`;
+            });
+            let pathD = '';
+            labels.forEach((lab, i) => {
+                const cx = marginLeft + step*i + step/2;
+                const y = baseY - ((lineValues[i]||0)/maxLine) * plotH;
+                pathD += (i===0?'M':'L') + cx.toFixed(1) + ',' + y.toFixed(1) + ' ';
+            });
+            svg += `<path d="${pathD}" fill="none" stroke="${lineColor}" stroke-width="3.5"/>`;
+            labels.forEach((lab, i) => {
+                const cx = marginLeft + step*i + step/2;
+                const v = lineValues[i] || 0;
+                const y = baseY - (v/maxLine) * plotH;
+                svg += `<circle cx="${cx}" cy="${y}" r="5" fill="${lineColor}"/>`;
+                svg += `<text x="${cx}" y="${y-12}" font-size="13" font-weight="900" text-anchor="middle" fill="${lineColor}">${v}</text>`;
+            });
+            svg += `<line x1="${marginLeft}" y1="${baseY}" x2="${width-marginRight}" y2="${baseY}" stroke="#475569" stroke-width="2"/>`;
+            svg += `</svg>`;
+            return svg;
+        }
+
+        // 分組長條圖（同一類別下並排多個數列，例如「新案人數」與「列管數」並排比較）
+        function buildGroupedBarSVG(categories, seriesDefs, opts) {
+            opts = Object.assign({ width: 620, height: 400, depthX: 14, depthY: 18, barWidth: 46, barGap: 10, groupGap: 60, marginLeft: 55, marginRight: 30, marginBottom: 90, marginTop: 25, maxValue: null }, opts || {});
+            const { width, height, depthX, depthY, barWidth, barGap, groupGap, marginLeft, marginRight, marginBottom, marginTop } = opts;
+            const plotHeight = height - marginTop - marginBottom;
+            const plotWidth = width - marginLeft - marginRight - depthX;
+            let maxValue = opts.maxValue;
+            if (!maxValue) {
+                maxValue = 0;
+                seriesDefs.forEach(s => s.values.forEach(v => { if ((v||0) > maxValue) maxValue = v; }));
+                maxValue = Math.ceil((maxValue * 1.15) / 5) * 5 || 5;
+            }
+            const scaleY = plotHeight / maxValue;
+            const baseY = marginTop + plotHeight;
+            let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft JhengHei','Source Han Sans TC',sans-serif">`;
+            const ticks = 5;
+            for (let t = 0; t <= ticks; t++) {
+                const val = Math.round(maxValue / ticks * t);
+                const y = baseY - val * scaleY;
+                svg += `<line x1="${marginLeft}" y1="${y}" x2="${width-marginRight}" y2="${y}" stroke="#e2e8f0" stroke-width="1"/>`;
+                svg += `<text x="${marginLeft-10}" y="${y+5}" font-size="14" text-anchor="end" fill="#334155">${val}</text>`;
+            }
+            const n = seriesDefs.length;
+            const groupWidth = n * barWidth + (n - 1) * barGap;
+            const totalWidth = categories.length * groupWidth + (categories.length - 1) * groupGap;
+            const startX = marginLeft + Math.max(0, (plotWidth - totalWidth) / 2);
+            categories.forEach((cat, ci) => {
+                const groupX = startX + ci * (groupWidth + groupGap);
+                seriesDefs.forEach(s => {
+                    const v = s.values[ci] || 0;
+                    const barX = groupX + seriesDefs.indexOf(s) * (barWidth + barGap);
+                    const h = v * scaleY;
+                    const topY = baseY - h;
+                    if (v > 0) {
+                        svg += `<rect x="${barX}" y="${topY}" width="${barWidth}" height="${h}" fill="${s.color}"/>`;
+                        svg += `<polygon points="${barX+barWidth},${topY} ${barX+barWidth+depthX},${topY-depthY} ${barX+barWidth+depthX},${baseY-depthY} ${barX+barWidth},${baseY}" fill="${shadeColor(s.color,0.62)}"/>`;
+                        svg += `<polygon points="${barX},${topY} ${barX+depthX},${topY-depthY} ${barX+barWidth+depthX},${topY-depthY} ${barX+barWidth},${topY}" fill="${shadeColor(s.color,1.25)}"/>`;
+                        svg += `<text x="${barX+barWidth/2}" y="${topY-8}" font-size="14" font-weight="900" text-anchor="middle" fill="#1e293b">${v}</text>`;
+                    }
+                });
+                svg += `<text x="${groupX+groupWidth/2}" y="${baseY+26}" font-size="15" font-weight="700" text-anchor="middle" fill="#1e293b">${cat}</text>`;
+            });
+            svg += `<line x1="${marginLeft}" y1="${baseY}" x2="${width-marginRight}" y2="${baseY}" stroke="#475569" stroke-width="2"/>`;
+            let lx = marginLeft + Math.max(0, (plotWidth - seriesDefs.length * 150) / 2);
+            seriesDefs.forEach(s => {
+                svg += `<rect x="${lx}" y="${height-28}" width="16" height="16" fill="${s.color}"/>`;
+                svg += `<text x="${lx+22}" y="${height-15}" font-size="14" font-weight="700" fill="#1e293b">${s.name}</text>`;
+                lx += 150;
+            });
+            svg += `</svg>`;
+            return svg;
+        }
+
+        function getQuarterMonths(yearStr, quarter) {
+            const map = { Q1: [1,2,3], Q2: [4,5,6], Q3: [7,8,9], Q4: [10,11,12] };
+            return map[quarter].map(m => `${yearStr}${m}月`);
+        }
+        function getYearMonths(yearStr) {
+            const arr = [];
+            for (let m=1; m<=12; m++) arr.push(`${yearStr}${m}月`);
+            return arr;
+        }
+        function findRecord(period) {
+            return globalData.monthly_records.find(r => r.period === period) || null;
+        }
+
+        async function captureElementCanvas(containerEl) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+            return await html2canvas(containerEl, { scale: 1.5, backgroundColor: '#ffffff', useCORS: true, ignoreElements: (el) => el.tagName === 'CANVAS' });
+        }
+
+        async function renderContainerToPdf(containerEl, filename) {
+            const statusEl = document.getElementById('report-export-status');
+            if (statusEl) statusEl.innerText = '報表產生中，請稍候...';
+            try {
+                const canvas = await captureElementCanvas(containerEl);
+                const imgData = canvas.toDataURL('image/jpeg', 0.92);
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+                const pageW = pdf.internal.pageSize.getWidth();
+                const pageH = pdf.internal.pageSize.getHeight();
+                const imgRatio = canvas.height / canvas.width;
+                let renderW = pageW - 40, renderH = renderW * imgRatio;
+                if (renderH > pageH - 40) { renderH = pageH - 40; renderW = renderH / imgRatio; }
+                pdf.addImage(imgData, 'JPEG', (pageW-renderW)/2, 20, renderW, renderH);
+                pdf.save(filename);
+                if (statusEl) statusEl.innerText = '✅ 報表已下載：' + filename;
+            } catch (err) {
+                console.warn('PDF 產生失敗：', err);
+                if (statusEl) statusEl.innerText = '⚠️ 報表產生失敗：' + err.message;
+                alert('報表產生失敗：' + err.message);
+            } finally {
+                containerEl.innerHTML = '';
+            }
+        }
+
+        // 多頁 PDF（A4 直式）：canvases 為依序要放入各頁的 canvas 陣列
+        async function saveMultiPagePortraitPdf(canvases, filename) {
+            const statusEl = document.getElementById('report-export-status');
+            try {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+                const pageW = pdf.internal.pageSize.getWidth();
+                const pageH = pdf.internal.pageSize.getHeight();
+                canvases.forEach((canvas, idx) => {
+                    if (idx > 0) pdf.addPage();
+                    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+                    const ratio = canvas.height / canvas.width;
+                    let renderW = pageW - 40, renderH = renderW * ratio;
+                    if (renderH > pageH - 40) { renderH = pageH - 40; renderW = renderH / ratio; }
+                    pdf.addImage(imgData, 'JPEG', (pageW-renderW)/2, 20, renderW, renderH, `page${idx}`, 'FAST');
+                });
+                pdf.save(filename);
+                if (statusEl) statusEl.innerText = '✅ 報表已下載：' + filename;
+            } catch (err) {
+                console.warn('PDF 產生失敗：', err);
+                if (statusEl) statusEl.innerText = '⚠️ 報表產生失敗：' + err.message;
+                alert('報表產生失敗：' + err.message);
+            }
+        }
+
+        async function exportQuarterlyReportPdf() {
+            if (globalData.monthly_records.length === 0) { alert('目前沒有任何資料可供匯出。'); return; }
+            const statusEl = document.getElementById('report-export-status');
+            if (statusEl) statusEl.innerText = '報表產生中，請稍候...';
+            const yearStr = document.getElementById('report-q-year').value;
+            const quarter = document.getElementById('report-q-quarter').value;
+            const months = getQuarterMonths(yearStr, quarter);
+            const quarterLabel = { Q1: '第一季', Q2: '第二季', Q3: '第三季', Q4: '第四季' }[quarter];
+            const today = new Date().toISOString().slice(0,10).replace(/-/g,'/');
+            const holder = document.getElementById('report-canvas-holder');
+
+            try {
+                // ========== 第1頁：本季各月門急診住院量能長條圖 ＋ 本季門急診住院量能圓餅圖 ==========
+                holder.style.width = '900px';
+                const columns = [];
+                months.forEach(period => {
+                    const r = findRecord(period);
+                    const w = r?.hospitalization?.温秀惠 || { clinic: 0, er: 0 };
+                    const f = r?.hospitalization?.范揚達 || { clinic: 0, er: 0 };
+                    columns.push({ label: '温秀惠', subLabel: period, segments: [ { value: w.clinic||0, color: '#0066cc' }, { value: w.er||0, color: '#cc0022' } ] });
+                    columns.push({ label: '范揚達', subLabel: period, segments: [ { value: f.clinic||0, color: '#00aa55' }, { value: f.er||0, color: '#ffaa00' } ] });
+                });
+                const barSvg = build3DStackedBarSVG(columns, { width: 820, height: 400, barWidth: 54, gap: 22, depthX: 14, depthY: 18, groupSize: 2 });
+
+                let wenClinicSum=0, wenErSum=0, fanClinicSum=0, fanErSum=0;
+                months.forEach(period => {
+                    const r = findRecord(period);
+                    wenClinicSum += r?.hospitalization?.温秀惠?.clinic || 0;
+                    wenErSum += r?.hospitalization?.温秀惠?.er || 0;
+                    fanClinicSum += r?.hospitalization?.范揚達?.clinic || 0;
+                    fanErSum += r?.hospitalization?.范揚達?.er || 0;
+                });
+                const wenPieSvg = build3DPieSVG([ {label:'門診', value: wenClinicSum, color:'#0066cc'}, {label:'急診', value: wenErSum, color:'#cc0022'} ], { width: 420 });
+                const fanPieSvg = build3DPieSVG([ {label:'門診', value: fanClinicSum, color:'#00aa55'}, {label:'急診', value: fanErSum, color:'#ffaa00'} ], { width: 420 });
+
+                holder.innerHTML = `
+                    <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
+                        <h1 style="font-size:22px; font-weight:900; color:#1e293b; margin-bottom:4px;">天成醫療社團法人天晟醫院兒科</h1>
+                        <h2 style="font-size:18px; font-weight:900; color:#1e3a8a; margin-bottom:20px;">${yearStr}${quarterLabel} 業務季報</h2>
+                        <div style="text-align:center; font-weight:900; font-size:15px; margin-bottom:6px;">各月醫師門急診住院量能</div>
+                        <div style="text-align:center;">${barSvg}</div>
+                        <div style="text-align:center; font-weight:900; font-size:16px; margin:6px 0 6px;">${yearStr}${quarterLabel} 醫師門急診住院量能</div>
+                        <div style="display:flex; justify-content:center; gap:20px;">
+                            <div style="text-align:center;"><div style="font-weight:700; font-size:15px;">温秀惠醫師</div>${wenPieSvg}</div>
+                            <div style="text-align:center;"><div style="font-weight:700; font-size:15px;">范揚達醫師</div>${fanPieSvg}</div>
+                        </div>
+                    </div>`;
+                const canvas1 = await captureElementCanvas(holder);
+                holder.style.width = '750px';
+
+                // ========== 第2頁：各月幼兒專責醫師新案/列管、兒童發展篩檢收案人數、小兒氣喘新案/列管 ==========
+                const monthLabels = months.slice();
+
+                // 幼兒專責醫師：各月新案人數(紅)與列管數(藍)，不分醫師
+                const specColumns = [];
+                months.forEach((period, i) => {
+                    const r = findRecord(period);
+                    const s = r?.specialist || {};
+                    const wenTotal = (s.wen_detail?.general_intake||0) + (s.wen_detail?.specified_intake||0);
+                    const fanTotal = (s.fan_detail?.general_intake||0) + (s.fan_detail?.specified_intake||0);
+                    const wenManaged = s.wen_detail?.managed || 0;
+                    const fanManaged = s.fan_detail?.managed || 0;
+                    specColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: wenTotal + fanTotal, color: '#cc0022' }] });
+                    specColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: wenManaged + fanManaged, color: '#0066cc' }] });
+                });
+                const specSvg = build3DStackedBarSVG(specColumns, { width: 680, height: 380, barWidth: 44, gap: 16, groupGap: 38, depthX: 10, depthY: 14, groupSize: 2 });
+
+                // 兒童發展篩檢：各月溫秀惠醫師收案數(紅)與范揚達醫師收案數(藍)，月與月之間留約1公分間距
+                const devColumns = [];
+                months.forEach((period, i) => {
+                    const r = findRecord(period);
+                    const d = r?.development || {};
+                    devColumns.push({ label: '温秀惠', subLabel: monthLabels[i], segments: [{ value: d.wen_cases||0, color: '#cc0022' }] });
+                    devColumns.push({ label: '范揚達', subLabel: monthLabels[i], segments: [{ value: d.fan_cases||0, color: '#0066cc' }] });
+                });
+                const devSvg = build3DStackedBarSVG(devColumns, { width: 680, height: 360, barWidth: 44, gap: 16, groupGap: 38, depthX: 10, depthY: 14, groupSize: 2 });
+
+                // 小兒氣喘收案：各月新案人數(紅)與列管數(藍)，並排長條圖
+                const asthmaColumns = [];
+                months.forEach((period, i) => {
+                    const r = findRecord(period);
+                    const a = r?.asthma || {};
+                    asthmaColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: a.new_cases||0, color: '#cc0022' }] });
+                    asthmaColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: a.current_managed||0, color: '#0066cc' }] });
+                });
+                const asthmaSvg = build3DStackedBarSVG(asthmaColumns, { width: 680, height: 340, barWidth: 44, gap: 16, groupGap: 38, depthX: 10, depthY: 14, groupSize: 2 });
+
+                holder.innerHTML = `
+                    <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
+                        <h2 style="font-size:18px; font-weight:900; color:#1e3a8a; margin-bottom:16px;">${yearStr}${quarterLabel} 業務季報（續）</h2>
+                        <div style="font-weight:900; font-size:15px; margin-bottom:0px;">👶 幼兒專責醫師：各月新案人數與列管數</div>
+                        <div style="font-size:13px; color:#475569; margin-bottom:4px;">🔴 新案人數　🔵 列管數</div>
+                        <div style="text-align:center;">${specSvg}</div>
+                        <div style="font-weight:900; font-size:15px; margin:10px 0 0px;">🔍 兒童發展篩檢：各月醫師收案人數</div>
+                        <div style="font-size:13px; color:#475569; margin-bottom:4px;">🔴 温秀惠醫師　🔵 范揚達醫師</div>
+                        <div style="text-align:center;">${devSvg}</div>
+                        <div style="font-weight:900; font-size:15px; margin:10px 0 0px;">🫁 小兒氣喘收案：各月新案人數與列管數</div>
+                        <div style="font-size:13px; color:#475569; margin-bottom:4px;">🔴 新案人數　🔵 列管數</div>
+                        <div style="text-align:center;">${asthmaSvg}</div>
+                    </div>`;
+                const canvas2 = await captureElementCanvas(holder);
+
+                await saveMultiPagePortraitPdf([canvas1, canvas2], `兒科業務季報_${yearStr}${quarterLabel}.pdf`);
+            } catch (err) {
+                console.warn('PDF 產生失敗：', err);
+                if (statusEl) statusEl.innerText = '⚠️ 報表產生失敗：' + err.message;
+                alert('報表產生失敗：' + err.message);
+            } finally {
+                holder.innerHTML = '';
+                holder.style.width = '';
+            }
+        }
+
+        async function exportAnnualReportPdf() {
+            if (globalData.monthly_records.length === 0) { alert('目前沒有任何資料可供匯出。'); return; }
+            const statusEl = document.getElementById('report-export-status');
+            if (statusEl) statusEl.innerText = '報表產生中，請稍候...';
+            const yearStr = document.getElementById('report-y-year').value;
+            const months = getYearMonths(yearStr);
+            const monthLabels = months.map((_,i) => `${i+1}月`);
+            const holder = document.getElementById('report-canvas-holder');
+            const canvases = [];
+
+            try {
+                // ========== 第1頁：全年門急住院量能 ==========
+                holder.style.width = '900px';
+                const hospColumns = [];
+                months.forEach((period, i) => {
+                    const r = findRecord(period);
+                    const w = r?.hospitalization?.温秀惠 || { clinic: 0, er: 0 };
+                    const f = r?.hospitalization?.范揚達 || { clinic: 0, er: 0 };
+                    hospColumns.push({ label: '', subLabel: monthLabels[i], segments: [ { value: w.clinic||0, color: '#0066cc' }, { value: w.er||0, color: '#cc0022' } ] });
+                    hospColumns.push({ label: '', subLabel: monthLabels[i], segments: [ { value: f.clinic||0, color: '#00aa55' }, { value: f.er||0, color: '#ffaa00' } ] });
+                });
+                const hospSvg = build3DStackedBarSVG(hospColumns, { width: 820, height: 380, barWidth: 18, gap: 5, groupGap: 14, depthX: 8, depthY: 10, groupSize: 2 });
+
+                let wenClinicSum=0, wenErSum=0, fanClinicSum=0, fanErSum=0;
+                months.forEach(period => {
+                    const r = findRecord(period);
+                    wenClinicSum += r?.hospitalization?.温秀惠?.clinic || 0;
+                    wenErSum += r?.hospitalization?.温秀惠?.er || 0;
+                    fanClinicSum += r?.hospitalization?.范揚達?.clinic || 0;
+                    fanErSum += r?.hospitalization?.范揚達?.er || 0;
+                });
+                const wenPieSvg = build3DPieSVG([ {label:'門診', value: wenClinicSum, color:'#0066cc'}, {label:'急診', value: wenErSum, color:'#cc0022'} ], { width: 420 });
+                const fanPieSvg = build3DPieSVG([ {label:'門診', value: fanClinicSum, color:'#00aa55'}, {label:'急診', value: fanErSum, color:'#ffaa00'} ], { width: 420 });
+
+                holder.innerHTML = `
+                    <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
+                        <h1 style="font-size:22px; font-weight:900; color:#1e293b; margin-bottom:4px;">天成醫療社團法人天晟醫院兒科</h1>
+                        <h2 style="font-size:18px; font-weight:900; color:#1e3a8a; margin-bottom:20px;">${yearStr}度業務總報表</h2>
+                        <div style="font-weight:900; font-size:15px; margin-bottom:0px;">🏥 門急住院量能：各月醫師門急診住院量能</div>
+                        <div style="font-size:13px; color:#475569; margin-bottom:4px;">🔵 温秀惠醫師：門診　🔴 温秀惠醫師：急診　🟢 范揚達醫師：門診　🟡 范揚達醫師：急診</div>
+                        <div style="text-align:center;">${hospSvg}</div>
+                        <div style="text-align:center; font-weight:900; font-size:16px; margin:10px 0 6px;">${yearStr}度 醫師門急診住院量能</div>
+                        <div style="display:flex; justify-content:center; gap:20px;">
+                            <div style="text-align:center;"><div style="font-weight:700; font-size:15px;">温秀惠醫師</div>${wenPieSvg}</div>
+                            <div style="text-align:center;"><div style="font-weight:700; font-size:15px;">范揚達醫師</div>${fanPieSvg}</div>
+                        </div>
+                    </div>`;
+                canvases.push(await captureElementCanvas(holder));
+
+                // ========== 第2頁：幼兒專責醫師 ==========
+                const specColumns = [];
+                months.forEach((period, i) => {
+                    const r = findRecord(period);
+                    const s = r?.specialist || {};
+                    const wenTotal = (s.wen_detail?.general_intake||0) + (s.wen_detail?.specified_intake||0);
+                    const fanTotal = (s.fan_detail?.general_intake||0) + (s.fan_detail?.specified_intake||0);
+                    const wenManaged = s.wen_detail?.managed || 0;
+                    const fanManaged = s.fan_detail?.managed || 0;
+                    specColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: wenTotal + fanTotal, color: '#cc0022' }] });
+                    specColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: wenManaged + fanManaged, color: '#0066cc' }] });
+                });
+                const specSvg = build3DStackedBarSVG(specColumns, { width: 820, height: 400, barWidth: 20, gap: 6, groupGap: 16, depthX: 9, depthY: 11, groupSize: 2 });
+
+                holder.innerHTML = `
+                    <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
+                        <h2 style="font-size:18px; font-weight:900; color:#1e3a8a; margin-bottom:16px;">${yearStr}度業務總報表（續）</h2>
+                        <div style="font-weight:900; font-size:15px; margin-bottom:0px;">👶 幼兒專責醫師：各月新案人數與列管數</div>
+                        <div style="font-size:13px; color:#475569; margin-bottom:4px;">🔴 新案人數　🔵 列管數</div>
+                        <div style="text-align:center;">${specSvg}</div>
+                    </div>`;
+                canvases.push(await captureElementCanvas(holder));
+
+                // ========== 第3頁：兒童發展篩檢 ==========
+                const devColumns = [];
+                months.forEach((period, i) => {
+                    const r = findRecord(period);
+                    const d = r?.development || {};
+                    devColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: d.wen_cases||0, color: '#cc0022' }] });
+                    devColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: d.fan_cases||0, color: '#0066cc' }] });
+                });
+                const devSvg = build3DStackedBarSVG(devColumns, { width: 820, height: 400, barWidth: 20, gap: 6, groupGap: 16, depthX: 9, depthY: 11, groupSize: 2 });
+
+                holder.innerHTML = `
+                    <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
+                        <h2 style="font-size:18px; font-weight:900; color:#1e3a8a; margin-bottom:16px;">${yearStr}度業務總報表（續）</h2>
+                        <div style="font-weight:900; font-size:15px; margin-bottom:0px;">🔍 兒童發展篩檢：各月醫師收案人數</div>
+                        <div style="font-size:13px; color:#475569; margin-bottom:4px;">🔴 温秀惠醫師　🔵 范揚達醫師</div>
+                        <div style="text-align:center;">${devSvg}</div>
+                    </div>`;
+                canvases.push(await captureElementCanvas(holder));
+
+                // ========== 第4頁：小兒氣喘收案 ==========
+                const asthmaColumns = [];
+                months.forEach((period, i) => {
+                    const r = findRecord(period);
+                    const a = r?.asthma || {};
+                    asthmaColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: a.new_cases||0, color: '#cc0022' }] });
+                    asthmaColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: a.current_managed||0, color: '#0066cc' }] });
+                });
+                const asthmaSvg = build3DStackedBarSVG(asthmaColumns, { width: 820, height: 400, barWidth: 20, gap: 6, groupGap: 16, depthX: 9, depthY: 11, groupSize: 2 });
+
+                holder.innerHTML = `
+                    <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
+                        <h2 style="font-size:18px; font-weight:900; color:#1e3a8a; margin-bottom:16px;">${yearStr}度業務總報表（續）</h2>
+                        <div style="font-weight:900; font-size:15px; margin-bottom:0px;">🫁 小兒氣喘收案：各月新案人數與列管數</div>
+                        <div style="font-size:13px; color:#475569; margin-bottom:4px;">🔴 新案人數　🔵 列管數</div>
+                        <div style="text-align:center;">${asthmaSvg}</div>
+                    </div>`;
+                canvases.push(await captureElementCanvas(holder));
+
+                await saveMultiPagePortraitPdf(canvases, `兒科業務總報表_${yearStr}.pdf`);
+            } catch (err) {
+                console.warn('PDF 產生失敗：', err);
+                if (statusEl) statusEl.innerText = '⚠️ 報表產生失敗：' + err.message;
+                alert('報表產生失敗：' + err.message);
+            } finally {
+                holder.innerHTML = '';
+                holder.style.width = '';
+            }
+        }
+    </script>
+</body>
+</html>
