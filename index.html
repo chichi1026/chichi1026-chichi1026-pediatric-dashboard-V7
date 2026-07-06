@@ -1436,22 +1436,26 @@
 
         // 立體堆疊柱狀圖（前面／側面／頂面三個面模擬 3D 效果）
         function build3DStackedBarSVG(columns, opts) {
-            opts = Object.assign({ width: 1100, height: 480, depthX: 18, depthY: 22, barWidth: 68, gap: 34, maxValue: null, marginLeft: 55, marginRight: 40, marginBottom: 78, marginTop: 25, groupSize: 1, groupGap: 0 }, opts || {});
-            const { width, height, depthX, depthY, barWidth, gap, marginLeft, marginRight, marginBottom, marginTop, groupSize, groupGap } = opts;
+            opts = Object.assign({ width: 1100, height: 480, depthX: 18, depthY: 22, barWidth: 68, gap: 34, maxValue: null, marginLeft: 55, marginRight: 40, marginBottom: 78, marginTop: 25, groupSize: 1, groupGap: 0, tickInterval: null }, opts || {});
+            const { width, height, depthX, depthY, barWidth, gap, marginLeft, marginRight, marginBottom, marginTop, groupSize, groupGap, tickInterval } = opts;
             const plotHeight = height - marginTop - marginBottom;
             const plotWidth = width - marginLeft - marginRight - depthX;
             let maxValue = opts.maxValue;
             if (!maxValue) {
                 maxValue = 0;
                 columns.forEach(c => { const t = c.segments.reduce((s,x)=>s+x.value,0); if (t > maxValue) maxValue = t; });
-                maxValue = Math.ceil((maxValue * 1.15) / 10) * 10 || 10;
+                if (tickInterval) {
+                    maxValue = Math.ceil((maxValue * 1.15) / tickInterval) * tickInterval || tickInterval;
+                } else {
+                    maxValue = Math.ceil((maxValue * 1.15) / 10) * 10 || 10;
+                }
             }
             const scaleY = plotHeight / maxValue;
             const baseY = marginTop + plotHeight;
             let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft JhengHei','Source Han Sans TC',sans-serif">`;
-            const ticks = 7;
+            const ticks = tickInterval ? Math.round(maxValue / tickInterval) : 7;
             for (let t = 0; t <= ticks; t++) {
-                const val = Math.round(maxValue / ticks * t);
+                const val = tickInterval ? tickInterval * t : Math.round(maxValue / ticks * t);
                 const y = baseY - val * scaleY;
                 svg += `<line x1="${marginLeft}" y1="${y}" x2="${width-marginRight}" y2="${y}" stroke="#e2e8f0" stroke-width="1"/>`;
                 svg += `<text x="${marginLeft-10}" y="${y+5}" font-size="15" text-anchor="end" fill="#334155">${val}</text>`;
@@ -1708,15 +1712,16 @@
         }
 
         // 多頁 PDF（A4 直式）：canvases 為依序要放入各頁的 canvas 陣列
-        async function saveMultiPagePortraitPdf(canvases, filename) {
+        async function saveMultiPagePortraitPdf(canvases, filename, orientation) {
+            orientation = orientation || 'portrait';
             const statusEl = document.getElementById('report-export-status');
             try {
                 const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+                const pdf = new jsPDF({ orientation: orientation, unit: 'pt', format: 'a4' });
                 const pageW = pdf.internal.pageSize.getWidth();
                 const pageH = pdf.internal.pageSize.getHeight();
                 canvases.forEach((canvas, idx) => {
-                    if (idx > 0) pdf.addPage();
+                    if (idx > 0) pdf.addPage('a4', orientation);
                     const imgData = canvas.toDataURL('image/jpeg', 0.92);
                     const ratio = canvas.height / canvas.width;
                     let renderW = pageW - 40, renderH = renderW * ratio;
@@ -1754,7 +1759,7 @@
                     columns.push({ label: '温秀惠', subLabel: period, segments: [ { value: w.clinic||0, color: '#0066cc' }, { value: w.er||0, color: '#cc0022' } ] });
                     columns.push({ label: '范揚達', subLabel: period, segments: [ { value: f.clinic||0, color: '#00aa55' }, { value: f.er||0, color: '#ffaa00' } ] });
                 });
-                const barSvg = build3DStackedBarSVG(columns, { width: 820, height: 400, barWidth: 54, gap: 22, depthX: 14, depthY: 18, groupSize: 2 });
+                const barSvg = build3DStackedBarSVG(columns, { width: 820, height: 400, barWidth: 54, gap: 22, depthX: 14, depthY: 18, groupSize: 2, tickInterval: 10 });
 
                 let wenClinicSum=0, wenErSum=0, fanClinicSum=0, fanErSum=0;
                 months.forEach(period => {
@@ -1797,7 +1802,7 @@
                     specColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: wenTotal + fanTotal, color: '#cc0022' }] });
                     specColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: wenManaged + fanManaged, color: '#0066cc' }] });
                 });
-                const specSvg = build3DStackedBarSVG(specColumns, { width: 680, height: 380, barWidth: 44, gap: 16, groupGap: 38, depthX: 10, depthY: 14, groupSize: 2 });
+                const specSvg = build3DStackedBarSVG(specColumns, { width: 680, height: 380, barWidth: 44, gap: 16, groupGap: 38, depthX: 10, depthY: 14, groupSize: 2, tickInterval: 50 });
 
                 // 兒童發展篩檢：各月溫秀惠醫師收案數(紅)與范揚達醫師收案數(藍)，月與月之間留約1公分間距
                 const devColumns = [];
@@ -1807,7 +1812,7 @@
                     devColumns.push({ label: '温秀惠', subLabel: monthLabels[i], segments: [{ value: d.wen_cases||0, color: '#cc0022' }] });
                     devColumns.push({ label: '范揚達', subLabel: monthLabels[i], segments: [{ value: d.fan_cases||0, color: '#0066cc' }] });
                 });
-                const devSvg = build3DStackedBarSVG(devColumns, { width: 680, height: 360, barWidth: 44, gap: 16, groupGap: 38, depthX: 10, depthY: 14, groupSize: 2 });
+                const devSvg = build3DStackedBarSVG(devColumns, { width: 680, height: 360, barWidth: 44, gap: 16, groupGap: 38, depthX: 10, depthY: 14, groupSize: 2, tickInterval: 2 });
 
                 // 小兒氣喘收案：各月新案人數(紅)與列管數(藍)，並排長條圖
                 const asthmaColumns = [];
@@ -1817,7 +1822,7 @@
                     asthmaColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: a.new_cases||0, color: '#cc0022' }] });
                     asthmaColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: a.current_managed||0, color: '#0066cc' }] });
                 });
-                const asthmaSvg = build3DStackedBarSVG(asthmaColumns, { width: 680, height: 340, barWidth: 44, gap: 16, groupGap: 38, depthX: 10, depthY: 14, groupSize: 2 });
+                const asthmaSvg = build3DStackedBarSVG(asthmaColumns, { width: 680, height: 340, barWidth: 44, gap: 16, groupGap: 38, depthX: 10, depthY: 14, groupSize: 2, tickInterval: 10 });
 
                 holder.innerHTML = `
                     <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
@@ -1857,7 +1862,7 @@
 
             try {
                 // ========== 第1頁：全年門急住院量能 ==========
-                holder.style.width = '900px';
+                holder.style.width = '1100px';
                 const hospColumns = [];
                 months.forEach((period, i) => {
                     const r = findRecord(period);
@@ -1866,7 +1871,7 @@
                     hospColumns.push({ label: '', subLabel: monthLabels[i], segments: [ { value: w.clinic||0, color: '#0066cc' }, { value: w.er||0, color: '#cc0022' } ] });
                     hospColumns.push({ label: '', subLabel: monthLabels[i], segments: [ { value: f.clinic||0, color: '#00aa55' }, { value: f.er||0, color: '#ffaa00' } ] });
                 });
-                const hospSvg = build3DStackedBarSVG(hospColumns, { width: 820, height: 380, barWidth: 18, gap: 5, groupGap: 14, depthX: 8, depthY: 10, groupSize: 2 });
+                const hospSvg = build3DStackedBarSVG(hospColumns, { width: 1000, height: 380, barWidth: 22, gap: 6, groupGap: 16, depthX: 8, depthY: 10, groupSize: 2, tickInterval: 10 });
 
                 let wenClinicSum=0, wenErSum=0, fanClinicSum=0, fanErSum=0;
                 months.forEach(period => {
@@ -1876,8 +1881,8 @@
                     fanClinicSum += r?.hospitalization?.范揚達?.clinic || 0;
                     fanErSum += r?.hospitalization?.范揚達?.er || 0;
                 });
-                const wenPieSvg = build3DPieSVG([ {label:'門診', value: wenClinicSum, color:'#0066cc'}, {label:'急診', value: wenErSum, color:'#cc0022'} ], { width: 420 });
-                const fanPieSvg = build3DPieSVG([ {label:'門診', value: fanClinicSum, color:'#00aa55'}, {label:'急診', value: fanErSum, color:'#ffaa00'} ], { width: 420 });
+                const wenPieSvg = build3DPieSVG([ {label:'門診', value: wenClinicSum, color:'#0066cc'}, {label:'急診', value: wenErSum, color:'#cc0022'} ], { width: 480 });
+                const fanPieSvg = build3DPieSVG([ {label:'門診', value: fanClinicSum, color:'#00aa55'}, {label:'急診', value: fanErSum, color:'#ffaa00'} ], { width: 480 });
 
                 holder.innerHTML = `
                     <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
@@ -1906,7 +1911,7 @@
                     specColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: wenTotal + fanTotal, color: '#cc0022' }] });
                     specColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: wenManaged + fanManaged, color: '#0066cc' }] });
                 });
-                const specSvg = build3DStackedBarSVG(specColumns, { width: 820, height: 400, barWidth: 20, gap: 6, groupGap: 16, depthX: 9, depthY: 11, groupSize: 2 });
+                const specSvg = build3DStackedBarSVG(specColumns, { width: 1000, height: 400, barWidth: 22, gap: 6, groupGap: 16, depthX: 9, depthY: 11, groupSize: 2, tickInterval: 50 });
 
                 holder.innerHTML = `
                     <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
@@ -1925,7 +1930,7 @@
                     devColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: d.wen_cases||0, color: '#cc0022' }] });
                     devColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: d.fan_cases||0, color: '#0066cc' }] });
                 });
-                const devSvg = build3DStackedBarSVG(devColumns, { width: 820, height: 400, barWidth: 20, gap: 6, groupGap: 16, depthX: 9, depthY: 11, groupSize: 2 });
+                const devSvg = build3DStackedBarSVG(devColumns, { width: 1000, height: 400, barWidth: 22, gap: 6, groupGap: 16, depthX: 9, depthY: 11, groupSize: 2, tickInterval: 2 });
 
                 holder.innerHTML = `
                     <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
@@ -1944,7 +1949,7 @@
                     asthmaColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: a.new_cases||0, color: '#cc0022' }] });
                     asthmaColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: a.current_managed||0, color: '#0066cc' }] });
                 });
-                const asthmaSvg = build3DStackedBarSVG(asthmaColumns, { width: 820, height: 400, barWidth: 20, gap: 6, groupGap: 16, depthX: 9, depthY: 11, groupSize: 2 });
+                const asthmaSvg = build3DStackedBarSVG(asthmaColumns, { width: 1000, height: 400, barWidth: 22, gap: 6, groupGap: 16, depthX: 9, depthY: 11, groupSize: 2, tickInterval: 10 });
 
                 holder.innerHTML = `
                     <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
@@ -1955,7 +1960,7 @@
                     </div>`;
                 canvases.push(await captureElementCanvas(holder));
 
-                await saveMultiPagePortraitPdf(canvases, `兒科業務總報表_${yearStr}.pdf`);
+                await saveMultiPagePortraitPdf(canvases, `兒科業務總報表_${yearStr}.pdf`, 'landscape');
             } catch (err) {
                 console.warn('PDF 產生失敗：', err);
                 if (statusEl) statusEl.innerText = '⚠️ 報表產生失敗：' + err.message;
