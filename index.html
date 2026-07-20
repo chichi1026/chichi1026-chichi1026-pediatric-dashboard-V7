@@ -92,7 +92,7 @@
         <button id="t-hosp" onclick="switchTab('tab-hosp')" class="tab-link border-b-4 border-transparent text-gray-600 hover:text-blue-700 py-4 px-2">📊 門急住院量能</button>
         <button id="t-specialist" onclick="switchTab('tab-specialist')" class="tab-link border-b-4 border-transparent text-gray-600 hover:text-red-600 py-4 px-2">👶 幼兒專責醫師</button>
         <button id="t-asthma" onclick="switchTab('tab-asthma')" class="tab-link border-b-4 border-transparent text-gray-600 hover:text-teal-600 py-4 px-2">🫁 兒童氣喘照護</button>
-        <button id="t-dev" onclick="switchTab('tab-dev')" class="tab-link border-b-4 border-transparent text-gray-600 hover:text-amber-600 py-4 px-2">🔍 幼兒發展評估</button>
+        <button id="t-dev" onclick="switchTab('tab-dev')" class="tab-link border-b-4 border-transparent text-gray-600 hover:text-amber-600 py-4 px-2">🔍 兒童發展篩檢</button>
         <button id="tab-input-link" onclick="switchTab('tab-input')" class="tab-link border-b-4 border-transparent text-red-600 hover:text-red-700 py-4 px-2 hidden">📝 月報鍵入</button>
         <button id="tab-cloud-link" onclick="switchTab('tab-cloud')" class="tab-link border-b-4 border-transparent text-slate-700 hover:text-slate-900 py-4 px-2 hidden">☁️ 雲端匯出</button>
     </nav>
@@ -102,6 +102,13 @@
          
         <!-- 【分頁：指標總覽】 -->
         <div id="tab-overview" class="tab-content block">
+            <div class="bg-white p-4 rounded-xl shadow border border-gray-300 mb-4">
+                <div class="flex flex-wrap items-center gap-3">
+                    <span class="font-black text-slate-700">📊 多年度比較：</span>
+                    <div id="overview-year-checkboxes" class="flex flex-wrap gap-3"></div>
+                    <span class="text-sm text-gray-500 font-bold">（勾選 2 個以上年度可比較趨勢；比較模式下不受上方年份/區間選單影響，固定顯示全年）</span>
+                </div>
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div class="bg-white p-5 rounded-xl shadow border-2 border-gray-200 border-l-[10px] border-l-blue-600">
                     <div class="kpi-title">兒科住院人次</div>
@@ -116,7 +123,7 @@
                     <div class="text-teal-600 kpi-value" id="kpi-asthma">-- 人</div>
                 </div>
                 <div class="bg-white p-5 rounded-xl shadow border-2 border-gray-200 border-l-[10px] border-l-amber-600">
-                    <div class="kpi-title">幼兒發展評估新案數</div>
+                    <div class="kpi-title">兒童發展篩檢新案數</div>
                     <div class="text-amber-600 kpi-value" id="kpi-dev">-- 案</div>
                 </div>
             </div>
@@ -284,7 +291,7 @@
             </div>
         </div>
  
-        <!-- 【分頁：幼兒發展評估】 -->
+        <!-- 【分頁：兒童發展篩檢】 -->
         <div id="tab-dev" class="tab-content hidden space-y-6">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="bg-white p-6 rounded-xl shadow border border-gray-300 lg:col-span-2 flex flex-col justify-between">
@@ -307,7 +314,7 @@
  
             <div class="bg-white p-6 rounded-xl shadow border border-gray-300 space-y-6">
                 <h3 id="table-title-dev-total" class="font-black text-2xl text-slate-800 mb-3 flex items-center">
-                    <span class="w-2.5 h-7 bg-amber-500 inline-block mr-2 rounded"></span> 🔍 幼兒發展評估：全科與負責醫師收案績效表
+                    <span class="w-2.5 h-7 bg-amber-500 inline-block mr-2 rounded"></span> 🔍 兒童發展篩檢：全科與負責醫師收案績效表
                 </h3>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div>
@@ -432,7 +439,7 @@
                         </div>
                     </div>
                     <div class="border-2 p-4 rounded-xl bg-slate-50">
-                        <h4 class="font-black text-2xl text-amber-900 mb-3 border-b-2 pb-1">🔍 幼兒發展評估</h4>
+                        <h4 class="font-black text-2xl text-amber-900 mb-3 border-b-2 pb-1">🔍 兒童發展篩檢</h4>
                         <div class="space-y-3">
                            <div><label class="text-lg text-gray-700 font-black">兒科門診看診人數(6個月-未滿7歲)</label><input type="number" id="f-dev-seen" class="border-2 p-3 w-full rounded-lg text-xl text-center"></div>
                            <p class="text-sm font-bold text-gray-500">收案請分以下年齡：6至10個月 / 10個月-1歲半 / 1歲半-2歲 / 2歲-3歲 / 3歲-5歲 / 5歲-未滿7歲</p>
@@ -646,6 +653,7 @@
         window.onload = async function() {
             loadPersistedData(); // 先讀本機快取，離線也能立即顯示上次資料
             initYearDropdown();
+            initOverviewYearCheckboxes();
             initMonthGroup();
             initFormSelect();
             initReportYearSelectors();
@@ -657,6 +665,7 @@
                 globalData = cloudData;
                 persistDashboardData();
                 initYearDropdown();
+                initOverviewYearCheckboxes();
                 initMonthGroup();
                 initFormSelect(); initReportYearSelectors();
                 updateDashboard();
@@ -694,12 +703,43 @@
             
             // 排序年份名單
             extractedYears.sort((a, b) => parseInt(a) - parseInt(b));
-            if(!extractedYears.includes(currentYear)) currentYear = extractedYears[0];
+            if(!currentYear || !extractedYears.includes(currentYear)) currentYear = extractedYears[0];
             
             select.innerHTML = "";
             extractedYears.forEach(y => {
                 select.innerHTML += `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`;
             });
+        }
+
+        // 總覽頁多年度比較用的年份多選框
+        function initOverviewYearCheckboxes() {
+            const container = document.getElementById('overview-year-checkboxes');
+            if (!container) return;
+            let extractedYears = [...new Set(globalData.monthly_records.map(r => r.period.substring(0, 4)))];
+            if (extractedYears.length === 0) extractedYears = ["113年"];
+            extractedYears.sort((a, b) => parseInt(a) - parseInt(b));
+            const prevChecked = new Set([...container.querySelectorAll('input:checked')].map(el => el.value));
+            container.innerHTML = extractedYears.map(y => {
+                const checked = prevChecked.size > 0 ? prevChecked.has(y) : (y === currentYear);
+                return `<label class="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full cursor-pointer border-2 ${checked ? 'border-blue-500' : 'border-transparent'}">
+                    <input type="checkbox" value="${y}" onchange="onOverviewYearCheckboxChange()" ${checked ? 'checked' : ''} class="w-4 h-4"> <span class="font-bold">${y}</span>
+                </label>`;
+            }).join('');
+        }
+
+        function getOverviewSelectedYears() {
+            const container = document.getElementById('overview-year-checkboxes');
+            if (!container) return [];
+            return [...container.querySelectorAll('input:checked')].map(el => el.value);
+        }
+
+        function onOverviewYearCheckboxChange() {
+            // 更新選取樣式框線
+            document.querySelectorAll('#overview-year-checkboxes label').forEach(label => {
+                const input = label.querySelector('input');
+                label.className = `flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full cursor-pointer border-2 ${input.checked ? 'border-blue-500' : 'border-transparent'}`;
+            });
+            updateDashboard();
         }
 
         // 下拉年份選取事件
@@ -854,7 +894,7 @@
             document.getElementById('title-pie-fan').innerText = `范揚達醫師 入院比例 (${currentYear}${currentMonth})`;
             document.getElementById('table-title-total').innerText = `👶 幼兒專責核心指標統計表 (${currentYear}${currentMonth})`;
             document.getElementById('table-title-asthma').innerText = `🫁 兒童氣喘品質方案：核心指標統計表 (${currentYear}${currentMonth})`;
-            document.getElementById('table-title-dev-total').innerText = `🔍 幼兒發展評估：全科與負責醫師收案績效表 (${currentYear}${currentMonth})`;
+            document.getElementById('table-title-dev-total').innerText = `🔍 兒童發展篩檢：全科與負責醫師收案績效表 (${currentYear}${currentMonth})`;
             document.getElementById('table-title-hosp').innerText = `🏥 門急診住院量能：臨床照護統計明細表 (${currentYear}${currentMonth})`;
  
             let totalHosp = 0, totalSpec = 0, totalAsthma = 0, totalDev = 0;
@@ -1132,7 +1172,7 @@
             
             persistDashboardData();
             document.getElementById('output-json-box').value = JSON.stringify(globalData, null, 2);
-            initYearDropdown(); // 同步重置年份選單名單[cite: 1]
+            initYearDropdown(); initOverviewYearCheckboxes(); // 同步重置年份選單名單[cite: 1]
             initFormSelect(); initReportYearSelectors();
             updateDashboard();
             loadFormValues(); // 重新顯示自動計算後的列管數
@@ -1154,7 +1194,7 @@
             if (cloudData) {
                 globalData = cloudData;
                 persistDashboardData();
-                initYearDropdown(); initMonthGroup(); initFormSelect(); initReportYearSelectors(); updateDashboard();
+                initYearDropdown(); initOverviewYearCheckboxes(); initMonthGroup(); initFormSelect(); initReportYearSelectors(); updateDashboard();
                 document.getElementById('output-json-box').value = JSON.stringify(globalData, null, 2);
                 alert("已從雲端重新整理最新資料！");
             } else {
@@ -1195,7 +1235,7 @@
             try {
                 const parsed = JSON.parse(document.getElementById('output-json-box').value);
                 if(parsed && Array.isArray(parsed.monthly_records)) {
-                    globalData = parsed; persistDashboardData(); initYearDropdown(); initMonthGroup(); initFormSelect(); initReportYearSelectors(); updateDashboard();
+                    globalData = parsed; persistDashboardData(); initYearDropdown(); initOverviewYearCheckboxes(); initMonthGroup(); initFormSelect(); initReportYearSelectors(); updateDashboard();
                     alert("匯入成功！若要讓其他電腦也看到，請記得按「手動同步至雲端」。");
                 }
             } catch(e) { alert("解析失敗"); }
@@ -1277,9 +1317,10 @@
  
         let c_h_m, c_d_m, c_h_d, c_h_p_w, c_h_p_f, c_s_d, c_a_d, c_d_d, c_dev_pie, c_spec_m, c_asthma_m; 
          
-        function renderAllCharts(fData) {
+        // 總覽 1-4 圖：單一年度/區間模式（原本邏輯）
+        function renderOverviewSingleCharts(fData) {
             const labelPeriods = fData.map(r => r.period);
- 
+
             // 1. 總覽：住院量（門診/急診 X 醫師堆疊）
             const hospOverview = { wenClinic: 0, wenEr: 0, fanClinic: 0, fanEr: 0 };
             fData.forEach(r => {
@@ -1333,7 +1374,7 @@
                 Object.keys(overviewAgeSums).forEach(k => { overviewAgeSums[k] += (dist[k] || 0); });
             });
             c_d_m.setOption({
-                title: { text: '🔍 4. 發展評估：年齡別案件分佈', textStyle: {fontSize: 18, fontWeight: 'bold'} },
+                title: { text: '🔍 4. 兒童發展篩檢：年齡別案件分佈', textStyle: {fontSize: 18, fontWeight: 'bold'} },
                 tooltip: { trigger: 'axis' },
                 grid: { left: '4%', right: '4%', bottom: '18%', top: '18%', containLabel: true },
                 xAxis: { type: 'category', data: ['6-10月', '10月-1.5歲', '1.5-2歲', '2-3歲', '3-5歲', '5-7歲'], axisLabel: { ...AXIS_LABEL_STYLE, interval: 0, rotate: 30 } },
@@ -1347,6 +1388,99 @@
                     { value: overviewAgeSums["5yTo7y"], itemStyle: { color: '#f48024' } }
                 ] }]
             });
+        }
+
+        const YEAR_COMPARE_PALETTE = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
+
+        // 總覽 1-4 圖：多年度比較模式（每個年度一條線/一組柱子，固定看全年12個月）
+        function renderOverviewComparisonCharts(years) {
+            const sortedYears = [...years].sort((a,b) => parseInt(a) - parseInt(b));
+            const monthLabels = Array.from({length:12}, (_,i) => `${i+1}月`);
+
+            const perYearData = sortedYears.map(y => {
+                const records = globalData.monthly_records.filter(r => r.period.startsWith(y));
+                const byMonth = {};
+                records.forEach(r => { byMonth[r.period] = r; });
+                return { year: y, records, byMonth };
+            });
+
+            // 1. 住院人次：各年度門診/急診總計（溫+范合計）
+            if(!c_h_m) c_h_m = echarts.init(document.getElementById('c-hosp-main'));
+            c_h_m.setOption({
+                title: { text: '🏥 1. 兒科住院人次（多年度比較）', textStyle: {fontSize: 18, fontWeight: 'bold'} },
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { data: sortedYears, textStyle: LEGEND_TEXT_STYLE, bottom: 0 },
+                xAxis: { type: 'category', data: ['門診', '急診'], axisLabel: AXIS_LABEL_STYLE },
+                yAxis: { type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 },
+                series: perYearData.map((yd, idx) => {
+                    let clinic = 0, er = 0;
+                    yd.records.forEach(r => {
+                        const hosp = r.hospitalization || {};
+                        Object.values(hosp).forEach(doc => {
+                            clinic += (doc && doc.clinic) || 0;
+                            er += (doc && doc.er) || 0;
+                        });
+                    });
+                    return { name: yd.year, type: 'bar', color: YEAR_COMPARE_PALETTE[idx % YEAR_COMPARE_PALETTE.length], label: LABEL_STYLE_WHITE, data: [clinic, er] };
+                })
+            });
+
+            // 2. 幼兒專責新案：各年度12個月新案人數趨勢
+            if(!c_spec_m) c_spec_m = echarts.init(document.getElementById('c-spec-main-panel'));
+            c_spec_m.setOption({
+                title: { text: '👶 2. 幼兒專責新案量指標（多年度比較）', textStyle: {fontSize: 18, fontWeight: 'bold'} },
+                tooltip: { trigger: 'axis' }, legend: { data: sortedYears, textStyle: LEGEND_TEXT_STYLE, bottom: 0 },
+                xAxis: { type: 'category', data: monthLabels, axisLabel: AXIS_LABEL_STYLE },
+                yAxis: { type: 'value', name: '新收案人數', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 },
+                series: perYearData.map((yd, idx) => ({
+                    name: yd.year, type: 'line', smooth: true, lineStyle: {width: 4}, symbolSize: 8,
+                    color: YEAR_COMPARE_PALETTE[idx % YEAR_COMPARE_PALETTE.length],
+                    data: monthLabels.map((_, m) => yd.byMonth[`${yd.year}${m+1}月`]?.specialist?.total_intake || 0)
+                }))
+            });
+ 
+            // 3. 氣喘方案：各年度12個月新案數趨勢
+            if(!c_asthma_m) c_asthma_m = echarts.init(document.getElementById('c-asthma-main-panel'));
+            c_asthma_m.setOption({
+                title: { text: '🫁 3. 氣喘方案管理趨勢（多年度比較）', textStyle: {fontSize: 18, fontWeight: 'bold'} },
+                tooltip: { trigger: 'axis' }, legend: { data: sortedYears, textStyle: LEGEND_TEXT_STYLE, bottom: 0 },
+                xAxis: { type: 'category', data: monthLabels, axisLabel: AXIS_LABEL_STYLE },
+                yAxis: { type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 },
+                series: perYearData.map((yd, idx) => ({
+                    name: yd.year, type: 'line', smooth: true, lineStyle: {width: 4}, symbolSize: 8,
+                    color: YEAR_COMPARE_PALETTE[idx % YEAR_COMPARE_PALETTE.length],
+                    data: monthLabels.map((_, m) => yd.byMonth[`${yd.year}${m+1}月`]?.asthma?.new_cases || 0)
+                }))
+            });
+ 
+            // 4. 發展篩檢：各年度年齡別案件分佈（分組長條）
+            if(!c_d_m) c_d_m = echarts.init(document.getElementById('c-dev-main'));
+            const ageKeys = ["6to10m", "10mTo1_5y", "1_5yTo2y", "2yTo3y", "3yTo5y", "5yTo7y"];
+            c_d_m.setOption({
+                title: { text: '🔍 4. 兒童發展篩檢：年齡別案件分佈（多年度比較）', textStyle: {fontSize: 18, fontWeight: 'bold'} },
+                tooltip: { trigger: 'axis' },
+                legend: { data: sortedYears, textStyle: LEGEND_TEXT_STYLE, bottom: 0 },
+                grid: { left: '4%', right: '4%', bottom: '22%', top: '18%', containLabel: true },
+                xAxis: { type: 'category', data: ['6-10月', '10月-1.5歲', '1.5-2歲', '2-3歲', '3-5歲', '5-7歲'], axisLabel: { ...AXIS_LABEL_STYLE, interval: 0, rotate: 30 } },
+                yAxis: { type: 'value', axisLabel: AXIS_LABEL_STYLE, minInterval: 1 },
+                series: perYearData.map((yd, idx) => {
+                    const sums = { "6to10m":0,"10mTo1_5y":0,"1_5yTo2y":0,"2yTo3y":0,"3yTo5y":0,"5yTo7y":0 };
+                    yd.records.forEach(r => { const dist = r.development?.age_distribution || {}; ageKeys.forEach(k => sums[k] += (dist[k]||0)); });
+                    return { name: yd.year, type: 'bar', color: YEAR_COMPARE_PALETTE[idx % YEAR_COMPARE_PALETTE.length], data: ageKeys.map(k => sums[k]) };
+                })
+            });
+        }
+
+        function renderAllCharts(fData) {
+            const labelPeriods = fData.map(r => r.period);
+
+            // 總覽 1-4 圖：若勾選2個以上年度，走多年度比較模式；否則維持原本單一區間邏輯
+            const overviewYears = getOverviewSelectedYears();
+            if (overviewYears.length > 1) {
+                renderOverviewComparisonCharts(overviewYears);
+            } else {
+                renderOverviewSingleCharts(fData);
+            }
  
             // 5. 單項：門急診並排圖
             if(!c_h_d) c_h_d = echarts.init(document.getElementById('c-hosp-detail'));
@@ -1408,7 +1542,7 @@
                 ] 
             });
  
-            // 發展評估詳細頁
+            // 兒童發展篩檢詳細頁
             if(!c_d_d) c_d_d = echarts.init(document.getElementById('c-dev-detail'));
             c_d_d.setOption({ tooltip: { trigger: 'axis' }, legend: { textStyle: {fontSize: 13, fontWeight: 'bold'} }, xAxis: { type: 'category', data: labelPeriods, axisLabel: {fontSize: 13, fontWeight: 'bold'} }, yAxis: { type: 'value', minInterval: 1 }, series: [{ name: '温秀惠', type: 'bar', color: '#ef4444', data: fData.map(r => r.development?.wen_cases || 0) }, { name: '范揚達', type: 'bar', color: '#1d4ed8', data: fData.map(r => r.development?.fan_cases || 0) }] });
  
