@@ -481,7 +481,22 @@
             <div class="bg-white p-6 rounded-xl shadow border max-w-3xl mx-auto mb-6">
                 <h3 class="font-black text-2xl text-gray-800 border-b-4 border-slate-200 pb-3 mb-4">📄 報表匯出（PDF）</h3>
                 <p class="text-base text-gray-600 mb-4 font-bold">依現有資料自動產生 PDF 報表，格式比照院內慣用的月報 / 季報樣式。</p>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-600 mb-1">月報：選擇年度／月份</label>
+                        <div class="flex gap-2">
+                            <select id="report-m-year" class="border-2 p-2 rounded-lg font-bold flex-1"></select>
+                            <select id="report-m-month" class="border-2 p-2 rounded-lg font-bold">
+                                <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+                                <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+                                <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+                                <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+                            </select>
+                        </div>
+                        <button onclick="exportMonthlyReportPdf()" class="w-full mt-2 bg-indigo-700 text-white font-black py-3 rounded-lg text-base hover:bg-indigo-800 transition shadow-md">
+                            📄 匯出月報 PDF
+                        </button>
+                    </div>
                     <div>
                         <label class="block text-sm font-bold text-gray-600 mb-1">季報：選擇年度／季別</label>
                         <div class="flex gap-2">
@@ -532,6 +547,13 @@
                 </div>
                 <div class="h-[2px] bg-gray-200 mb-4"></div>
                 <div class="admin-only hidden">
+                    <div class="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-4 mb-5">
+                        <p class="text-base font-black text-emerald-900 mb-2">💾 建議：每次鍵入完資料後，順手下載一份備份檔</p>
+                        <p class="text-sm text-gray-600 mb-3">下載到您自己的電腦或雲端硬碟保存，萬一雲端資料發生問題，才有本地備份可以救援還原。</p>
+                        <button onclick="downloadJsonBackup()" class="w-full bg-emerald-600 text-white font-black py-3 rounded-lg text-lg hover:bg-emerald-700 transition shadow-md">
+                            💾 下載 JSON 備份檔
+                        </button>
+                    </div>
                     <p class="text-base text-gray-600 mb-3 font-bold">以下為目前資料的 JSON 內容，可作為手動備份或疑難排解之用（僅限管理者查看）。</p>
                     <textarea id="output-json-box" class="w-full border p-3 text-sm font-mono h-[350px] bg-slate-900 text-slate-100 rounded shadow-inner" readonly></textarea>
                     <div class="mt-4 space-y-3">
@@ -567,7 +589,7 @@
 
         // 🌐 Google Apps Script Web App 雲端同步設定
         // 部署完成後，將下方網址換成您實際的 Web App 網址（.../exec 結尾）
-        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxA2nIZUULuYLOY9hGMsCL0Jog_adufL-YGufX7-FLkGKTKkJkNTXMugvSlpYqd6bgX/exec";
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxaYsS_wUlR1O_mv3pusoIcCO6Vc3SmR_w0xngn874ajiFs90kEewLnz_BS0KfrxyRCUA/exec";
         let syncKey = null; // 僅存在本次瀏覽器工作階段記憶體中，絕不寫入 localStorage，關閉分頁即消失
         let lastSyncTime = null;
 
@@ -650,6 +672,17 @@
             }
         }
 
+        // 🛡️ 資料保護：比對雲端抓回的資料量是否異常減少（例如雲端試算表被誤刪、或程式問題導致回傳空資料），
+        // 避免重演「雲端資料異常變空，卻無條件覆蓋掉本機正常資料」的事故。
+        function isSuspiciousDataDrop_(cloudData) {
+            const currentCount = (globalData.monthly_records || []).length;
+            const cloudCount = (cloudData.monthly_records || []).length;
+            if (currentCount >= 3 && cloudCount < currentCount * 0.5) {
+                return { suspicious: true, currentCount, cloudCount };
+            }
+            return { suspicious: false, currentCount, cloudCount };
+        }
+
         window.onload = async function() {
             loadPersistedData(); // 先讀本機快取，離線也能立即顯示上次資料
             initYearDropdown();
@@ -662,14 +695,20 @@
 
             const cloudData = await fetchCloudData();
             if (cloudData) {
-                globalData = cloudData;
-                persistDashboardData();
-                initYearDropdown();
-                initOverviewYearCheckboxes();
-                initMonthGroup();
-                initFormSelect(); initReportYearSelectors();
-                updateDashboard();
-                document.getElementById('output-json-box').value = JSON.stringify(globalData, null, 2);
+                const check = isSuspiciousDataDrop_(cloudData);
+                if (check.suspicious) {
+                    setSyncStatus('error', `⚠️雲端資料量異常（本機${check.currentCount}筆/雲端${check.cloudCount}筆），已阻擋自動覆蓋`);
+                    console.warn('偵測到雲端資料量異常減少，已阻擋自動覆蓋本機資料：', check);
+                } else {
+                    globalData = cloudData;
+                    persistDashboardData();
+                    initYearDropdown();
+                    initOverviewYearCheckboxes();
+                    initMonthGroup();
+                    initFormSelect(); initReportYearSelectors();
+                    updateDashboard();
+                    document.getElementById('output-json-box').value = JSON.stringify(globalData, null, 2);
+                }
             }
             updateSyncTimeDisplay();
         };
@@ -783,7 +822,7 @@
             const currentRocYear = getCurrentRocYear();
             if (existingYearNums.length === 0) existingYearNums = [currentRocYear];
             existingYearNums.sort((a,b) => a-b);
-            ['report-q-year', 'report-y-year'].forEach(id => {
+            ['report-m-year', 'report-q-year', 'report-y-year'].forEach(id => {
                 const sel = document.getElementById(id);
                 if (!sel) return;
                 const prev = sel.value;
@@ -1188,10 +1227,29 @@
         function copyJsonText() {
             const box = document.getElementById('output-json-box'); box.select(); document.execCommand('copy'); alert('複製成功！');
         }
+
+        function downloadJsonBackup() {
+            const dataStr = JSON.stringify(globalData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const today = new Date().toISOString().slice(0,10);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `兒科儀表板備份_${today}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
  
         async function refreshFromCloud() {
             const cloudData = await fetchCloudData();
             if (cloudData) {
+                const check = isSuspiciousDataDrop_(cloudData);
+                if (check.suspicious) {
+                    const proceed = confirm(`⚠️ 警告：雲端資料量異常減少！\n\n本機目前有 ${check.currentCount} 筆月份記錄，但雲端只抓到 ${check.cloudCount} 筆。\n\n這可能代表雲端試算表發生問題（例如檔案被刪除、被清空）。如果現在繼續，本機這份資料會被雲端的（較少的）資料覆蓋蓋掉，且無法復原！\n\n除非您非常確定雲端資料才是正確的，否則請按「取消」，先去檢查雲端 Google Sheet 狀況。\n\n確定要用雲端資料覆蓋本機嗎？`);
+                    if (!proceed) { alert('已取消，本機資料保持不變。'); return; }
+                }
                 globalData = cloudData;
                 persistDashboardData();
                 initYearDropdown(); initOverviewYearCheckboxes(); initMonthGroup(); initFormSelect(); initReportYearSelectors(); updateDashboard();
@@ -1868,6 +1926,115 @@
                 console.warn('PDF 產生失敗：', err);
                 if (statusEl) statusEl.innerText = '⚠️ 報表產生失敗：' + err.message;
                 alert('報表產生失敗：' + err.message);
+            }
+        }
+
+        async function exportMonthlyReportPdf() {
+            if (globalData.monthly_records.length === 0) { alert('目前沒有任何資料可供匯出。'); return; }
+            const statusEl = document.getElementById('report-export-status');
+            if (statusEl) statusEl.innerText = '報表產生中，請稍候...';
+            const yearStr = document.getElementById('report-m-year').value;
+            const monthNum = document.getElementById('report-m-month').value;
+            const period = `${yearStr}${monthNum}月`;
+            const months = [period]; // 月報：只有單一月份，其餘邏輯與季報完全共用
+            const holder = document.getElementById('report-canvas-holder');
+
+            try {
+                // ========== 第1頁：當月門急診住院量能長條圖 ＋ 當月門急診住院量能圓餅圖 ==========
+                holder.style.width = '900px';
+                const columns = [];
+                months.forEach(p => {
+                    const r = findRecord(p);
+                    const w = r?.hospitalization?.温秀惠 || { clinic: 0, er: 0 };
+                    const f = r?.hospitalization?.范揚達 || { clinic: 0, er: 0 };
+                    columns.push({ label: '温秀惠', subLabel: p, segments: [ { value: w.clinic||0, color: '#0066cc' }, { value: w.er||0, color: '#cc0022' } ] });
+                    columns.push({ label: '范揚達', subLabel: p, segments: [ { value: f.clinic||0, color: '#00aa55' }, { value: f.er||0, color: '#ffaa00' } ] });
+                });
+                const barSvg = build3DStackedBarSVG(columns, { width: 820, height: 400, barWidth: 90, gap: 40, depthX: 14, depthY: 18, groupSize: 2, tickInterval: 10 });
+
+                let wenClinicSum=0, wenErSum=0, fanClinicSum=0, fanErSum=0;
+                months.forEach(p => {
+                    const r = findRecord(p);
+                    wenClinicSum += r?.hospitalization?.温秀惠?.clinic || 0;
+                    wenErSum += r?.hospitalization?.温秀惠?.er || 0;
+                    fanClinicSum += r?.hospitalization?.范揚達?.clinic || 0;
+                    fanErSum += r?.hospitalization?.范揚達?.er || 0;
+                });
+                const wenPieSvg = build3DPieSVG([ {label:'門診', value: wenClinicSum, color:'#0066cc'}, {label:'急診', value: wenErSum, color:'#cc0022'} ], { width: 420 });
+                const fanPieSvg = build3DPieSVG([ {label:'門診', value: fanClinicSum, color:'#00aa55'}, {label:'急診', value: fanErSum, color:'#ffaa00'} ], { width: 420 });
+
+                holder.innerHTML = `
+                    <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
+                        <h1 style="font-size:22px; font-weight:900; color:#1e293b; margin-bottom:4px;">天成醫療社團法人天晟醫院兒科</h1>
+                        <h2 style="font-size:18px; font-weight:900; color:#1e3a8a; margin-bottom:20px;">${period} 業務月報</h2>
+                        <div style="text-align:center; font-weight:900; font-size:15px; margin-bottom:6px;">當月醫師門急診住院量能</div>
+                        <div style="text-align:center;">${barSvg}</div>
+                        <div style="text-align:center; font-weight:900; font-size:16px; margin:6px 0 6px;">${period} 醫師門急診住院量能</div>
+                        <div style="display:flex; justify-content:center; gap:20px;">
+                            <div style="text-align:center;"><div style="font-weight:700; font-size:15px;">温秀惠醫師</div>${wenPieSvg}</div>
+                            <div style="text-align:center;"><div style="font-weight:700; font-size:15px;">范揚達醫師</div>${fanPieSvg}</div>
+                        </div>
+                    </div>`;
+                const canvas1 = await captureElementCanvas(holder);
+                holder.style.width = '750px';
+
+                // ========== 第2頁：當月幼兒專責醫師新案/列管、兒童發展篩檢收案人數、小兒氣喘新案/列管 ==========
+                const monthLabels = months.slice();
+
+                const specColumns = [];
+                months.forEach((p, i) => {
+                    const r = findRecord(p);
+                    const s = r?.specialist || {};
+                    const wenTotal = (s.wen_detail?.general_intake||0) + (s.wen_detail?.specified_intake||0);
+                    const fanTotal = (s.fan_detail?.general_intake||0) + (s.fan_detail?.specified_intake||0);
+                    const wenManaged = s.wen_detail?.managed || 0;
+                    const fanManaged = s.fan_detail?.managed || 0;
+                    specColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: wenTotal + fanTotal, color: '#cc0022' }] });
+                    specColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: wenManaged + fanManaged, color: '#0066cc' }] });
+                });
+                const specSvg = build3DStackedBarSVG(specColumns, { width: 680, height: 380, barWidth: 90, gap: 40, depthX: 10, depthY: 14, groupSize: 2, tickInterval: 50 });
+
+                const devColumns = [];
+                months.forEach((p, i) => {
+                    const r = findRecord(p);
+                    const d = r?.development || {};
+                    devColumns.push({ label: '温秀惠', subLabel: monthLabels[i], segments: [{ value: d.wen_cases||0, color: '#cc0022' }] });
+                    devColumns.push({ label: '范揚達', subLabel: monthLabels[i], segments: [{ value: d.fan_cases||0, color: '#0066cc' }] });
+                });
+                const devSvg = build3DStackedBarSVG(devColumns, { width: 680, height: 360, barWidth: 90, gap: 40, depthX: 10, depthY: 14, groupSize: 2, tickInterval: 2 });
+
+                const asthmaColumns = [];
+                months.forEach((p, i) => {
+                    const r = findRecord(p);
+                    const a = r?.asthma || {};
+                    asthmaColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: a.new_cases||0, color: '#cc0022' }] });
+                    asthmaColumns.push({ label: '', subLabel: monthLabels[i], segments: [{ value: a.current_managed||0, color: '#0066cc' }] });
+                });
+                const asthmaSvg = build3DStackedBarSVG(asthmaColumns, { width: 680, height: 340, barWidth: 90, gap: 40, depthX: 10, depthY: 14, groupSize: 2, tickInterval: 10 });
+
+                holder.innerHTML = `
+                    <div style="padding:30px; font-family:'Microsoft JhengHei','Source Han Sans TC',sans-serif;">
+                        <h2 style="font-size:18px; font-weight:900; color:#1e3a8a; margin-bottom:16px;">${period} 業務月報（續）</h2>
+                        <div style="font-weight:900; font-size:15px; margin-bottom:0px;">👶 幼兒專責醫師：當月新案人數與列管數</div>
+                        <div style="font-size:13px; color:#475569; margin-bottom:4px;">🔴 新案人數　🔵 列管數</div>
+                        <div style="text-align:center;">${specSvg}</div>
+                        <div style="font-weight:900; font-size:15px; margin:10px 0 0px;">🔍 兒童發展篩檢：當月醫師收案人數</div>
+                        <div style="font-size:13px; color:#475569; margin-bottom:4px;">🔴 温秀惠醫師　🔵 范揚達醫師</div>
+                        <div style="text-align:center;">${devSvg}</div>
+                        <div style="font-weight:900; font-size:15px; margin:10px 0 0px;">🫁 小兒氣喘收案：當月新案人數與列管數</div>
+                        <div style="font-size:13px; color:#475569; margin-bottom:4px;">🔴 新案人數　🔵 列管數</div>
+                        <div style="text-align:center;">${asthmaSvg}</div>
+                    </div>`;
+                const canvas2 = await captureElementCanvas(holder);
+
+                await saveMultiPagePortraitPdf([canvas1, canvas2], `兒科業務月報_${period}.pdf`);
+            } catch (err) {
+                console.warn('PDF 產生失敗：', err);
+                if (statusEl) statusEl.innerText = '⚠️ 報表產生失敗：' + err.message;
+                alert('報表產生失敗：' + err.message);
+            } finally {
+                holder.innerHTML = '';
+                holder.style.width = '';
             }
         }
 
