@@ -1284,8 +1284,11 @@
 
         function resetSyncKey() {
             if(permissionLevel === 'viewer') { alert("請先登入使用者或管理者身份。"); return; }
-            syncKey = null;
-            alert("已清除本次工作階段的同步金鑰，下次同步時會重新詢問。");
+            const t = prompt("請輸入雲端同步金鑰（部署 Google Apps Script 時，在「指令碼屬性」設定的 WRITE_KEY）：", syncKey || "");
+            if (t === null) { return; } // 使用者按取消，維持原狀
+            if (!t.trim()) { alert("未輸入內容，金鑰未變更。"); return; }
+            syncKey = t.trim();
+            alert("同步金鑰已更新！此金鑰只會保留在本次瀏覽器工作階段中，關閉分頁後需要重新輸入。");
         }
  
         function importJsonText() {
