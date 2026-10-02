@@ -258,7 +258,20 @@
         </div>
         <div><h4 class="font-black text-base text-slate-800 mb-2">各年齡層收案分佈</h4>
         <div class="table-scroll"><table class="w-full report-table shadow-sm" style="min-width:580px">
-            <thead><tr><th class="w-1/6">統計區間</th><th>6至10個月</th><th>10個月-1歲半</th><th>1歲半-2歲</th><th>2歲-3歲</th><th>3歲-5歲</th><th>5歲-未滿7歲</th><th class="bg-amber-header">合計</th></tr></thead>
+            <thead>
+                <tr>
+                    <th rowspan="2" class="w-1/8">統計區間</th>
+                    <th colspan="2" class="bg-amber-500 text-white text-xs">115年7月起新制</th>
+                    <th colspan="2" class="bg-slate-400 text-white text-xs">舊制（114年前）</th>
+                    <th rowspan="2">1歲半-2歲</th><th rowspan="2">2歲-3歲</th><th rowspan="2">3歲-5歲</th><th rowspan="2">5歲-未滿7歲</th><th rowspan="2" class="bg-amber-header">合計</th>
+                </tr>
+                <tr>
+                    <th class="bg-amber-400 text-white text-xs">6-12個月</th>
+                    <th class="bg-amber-400 text-white text-xs">12-18個月</th>
+                    <th class="bg-slate-300 text-xs">6至10個月</th>
+                    <th class="bg-slate-300 text-xs">10個月-1歲半</th>
+                </tr>
+            </thead>
             <tbody id="tbody-dev-age"></tbody>
         </table></div></div>
     </div>
@@ -327,8 +340,12 @@
                     <div class="grid grid-cols-2 gap-3">
                         <div><div class="font-black text-xs text-blue-900 mb-1">温秀惠醫師</div>
                         <div class="space-y-1">
-                            <div><label class="text-xs text-gray-600">6至10個月</label><input type="number" id="f-dev-wen-1" class="border-2 p-1 w-full rounded text-sm text-center"></div>
-                            <div><label class="text-xs text-gray-600">10個月-1歲半</label><input type="number" id="f-dev-wen-2" class="border-2 p-1 w-full rounded text-sm text-center"></div>
+                            <div class="bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 mb-1"><p class="text-xs text-amber-700 font-black">✦ 115年7月起新制年齡</p>
+                                <div><label class="text-xs text-gray-600">6-12個月</label><input type="number" id="f-dev-wen-n1" class="border-2 p-1 w-full rounded text-sm text-center bg-amber-50"></div>
+                                <div><label class="text-xs text-gray-600">12-18個月</label><input type="number" id="f-dev-wen-n2" class="border-2 p-1 w-full rounded text-sm text-center bg-amber-50"></div>
+                            </div>
+                            <div><label class="text-xs text-gray-500">舊制：6至10個月</label><input type="number" id="f-dev-wen-1" class="border-2 p-1 w-full rounded text-sm text-center"></div>
+                            <div><label class="text-xs text-gray-500">舊制：10個月-1歲半</label><input type="number" id="f-dev-wen-2" class="border-2 p-1 w-full rounded text-sm text-center"></div>
                             <div><label class="text-xs text-gray-600">1歲半-2歲</label><input type="number" id="f-dev-wen-3" class="border-2 p-1 w-full rounded text-sm text-center"></div>
                             <div><label class="text-xs text-gray-600">2歲-3歲</label><input type="number" id="f-dev-wen-4" class="border-2 p-1 w-full rounded text-sm text-center"></div>
                             <div><label class="text-xs text-gray-600">3歲-5歲</label><input type="number" id="f-dev-wen-5" class="border-2 p-1 w-full rounded text-sm text-center"></div>
@@ -336,8 +353,12 @@
                         </div></div>
                         <div><div class="font-black text-xs text-emerald-800 mb-1">范揚達醫師</div>
                         <div class="space-y-1">
-                            <div><label class="text-xs text-gray-600">6至10個月</label><input type="number" id="f-dev-fan-1" class="border-2 p-1 w-full rounded text-sm text-center"></div>
-                            <div><label class="text-xs text-gray-600">10個月-1歲半</label><input type="number" id="f-dev-fan-2" class="border-2 p-1 w-full rounded text-sm text-center"></div>
+                            <div class="bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 mb-1"><p class="text-xs text-amber-700 font-black">✦ 115年7月起新制年齡</p>
+                                <div><label class="text-xs text-gray-600">6-12個月</label><input type="number" id="f-dev-fan-n1" class="border-2 p-1 w-full rounded text-sm text-center bg-amber-50"></div>
+                                <div><label class="text-xs text-gray-600">12-18個月</label><input type="number" id="f-dev-fan-n2" class="border-2 p-1 w-full rounded text-sm text-center bg-amber-50"></div>
+                            </div>
+                            <div><label class="text-xs text-gray-500">舊制：6至10個月</label><input type="number" id="f-dev-fan-1" class="border-2 p-1 w-full rounded text-sm text-center"></div>
+                            <div><label class="text-xs text-gray-500">舊制：10個月-1歲半</label><input type="number" id="f-dev-fan-2" class="border-2 p-1 w-full rounded text-sm text-center"></div>
                             <div><label class="text-xs text-gray-600">1歲半-2歲</label><input type="number" id="f-dev-fan-3" class="border-2 p-1 w-full rounded text-sm text-center"></div>
                             <div><label class="text-xs text-gray-600">2歲-3歲</label><input type="number" id="f-dev-fan-4" class="border-2 p-1 w-full rounded text-sm text-center"></div>
                             <div><label class="text-xs text-gray-600">3歲-5歲</label><input type="number" id="f-dev-fan-5" class="border-2 p-1 w-full rounded text-sm text-center"></div>
@@ -402,7 +423,7 @@
 <script>
 // ═══ 資料與設定 ═══
 let globalData={last_updated:"",monthly_records:[]};
-let currentYear="113年",currentMonth="全年",permissionLevel="viewer";
+let currentYear="",currentMonth="全年",permissionLevel="viewer";
 const USER_PASSCODE="user-peds",MANAGER_PASSCODE="peds-admin";
 const STORAGE_KEY="pediatric_quality_dashboard_data_v1";
 const WEB_APP_URL="https://script.google.com/macros/s/AKfycbxaYsS_wUlR1O_mv3pusoIcCO6Vc3SmR_w0xngn874ajiFs90kEewLnz_BS0KfrxyRCUA/exec";
@@ -455,7 +476,7 @@ function initYearDropdown(){
   const s=document.getElementById('year-select');
   let y=[...new Set(globalData.monthly_records.map(r=>r.period.substring(0,4)))];
   if(!y.length)y=["113年"];y.sort((a,b)=>parseInt(a)-parseInt(b));
-  if(!currentYear||!y.includes(currentYear))currentYear=y[0];
+  if(!currentYear||!y.includes(currentYear))currentYear=y[y.length-1];
   s.innerHTML=y.map(v=>`<option value="${v}" ${v===currentYear?'selected':''}>${v}</option>`).join('');
 }
 function initOverviewYearCheckboxes(){
@@ -553,7 +574,8 @@ function makeAsthmaInsight(f){if(!f.length)return'尚無資料';const t=f.reduce
 function makeDevInsight(f){
   if(!f.length)return'尚無資料';
   const t=f.reduce((s,r)=>s+(r.development?.cases_taken||0),0);
-  const ks=["6to10m","10mTo1_5y","1_5yTo2y","2yTo3y","3yTo5y","5yTo7y"],ls=['6-10個月','10月-1.5歲','1.5-2歲','2-3歲','3-5歲','5-7歲'];
+  const ks=["6to12m","12mTo1_5y","6to10m","10mTo1_5y","1_5yTo2y","2yTo3y","3yTo5y","5yTo7y"];
+  const ls=['6-12個月(新)','12-18個月(新)','6至10個月(舊)','10個月-1.5歲(舊)','1.5-2歲','2-3歲','3-5歲','5-7歲'];
   const sm={};ks.forEach(k=>sm[k]=0);f.forEach(r=>{const d=r.development?.age_distribution||{};ks.forEach(k=>sm[k]+=(d[k]||0));});
   const mx=ks.reduce((m,k)=>sm[k]>sm[m]?k:m,ks[0]);
   return`本期合計收案 ${t} 案。最多年齡層為「${ls[ks.indexOf(mx)]}」（${sm[mx]} 案）。`;
@@ -640,18 +662,26 @@ function renderAsthmaTables(fd){
 }
 function renderDevelopmentTables(fd){
   const t1=document.getElementById('tbody-dev-total'),tD=document.getElementById('tbody-dev-doctors'),tA=document.getElementById('tbody-dev-age');t1.innerHTML='';tD.innerHTML='';tA.innerHTML='';if(!fd.length)return;
-  const ks=["6to10m","10mTo1_5y","1_5yTo2y","2yTo3y","3yTo5y","5yTo7y"];
-  let tS=0,tT=0,wS=0,fS=0,agS={};ks.forEach(k=>agS[k]=0);
+  // 欄位順序：新制兩欄先，舊制兩欄後，共用四欄
+  const ksNew=["6to12m","12mTo1_5y"];
+  const ksOld=["6to10m","10mTo1_5y"];
+  const ksShared=["1_5yTo2y","2yTo3y","3yTo5y","5yTo7y"];
+  const ksAll=[...ksNew,...ksOld,...ksShared];
+  let tS=0,tT=0,wS=0,fS=0,agS={};ksAll.forEach(k=>agS[k]=0);
   fd.forEach(r=>{const d=r.development||{};tS+=(d.opd_seen||0);tT+=(d.cases_taken||0);wS+=(d.wen_cases||0);fS+=(d.fan_cases||0);
     t1.innerHTML+=`<tr><td>${r.period}</td><td>${d.opd_seen||0}</td><td class="text-amber-600">${d.cases_taken||0}</td></tr>`;
     tD.innerHTML+=`<tr><td>${r.period}</td><td class="text-red-600 font-extrabold">${d.wen_cases||0}</td><td class="text-emerald-700 font-extrabold">${d.fan_cases||0}</td></tr>`;
-    const di=d.age_distribution||{};let rt=0;const cells=ks.map(k=>{const v=di[k]||0;agS[k]+=v;rt+=v;return`<td>${v}</td>`;}).join('');
+    const di=d.age_distribution||{};let rt=0;
+    const cells=ksNew.map(k=>{const v=di[k]||0;agS[k]+=v;rt+=v;return`<td class="bg-amber-50">${v||''}</td>`;}).join('')
+      +ksOld.map(k=>{const v=di[k]||0;agS[k]+=v;rt+=v;return`<td class="bg-slate-50 text-gray-500">${v||''}</td>`;}).join('')
+      +ksShared.map(k=>{const v=di[k]||0;agS[k]+=v;rt+=v;return`<td>${v||''}</td>`;}).join('');
     tA.innerHTML+=`<tr><td>${r.period}</td>${cells}<td class="bg-amber-50 font-black text-amber-800">${rt}</td></tr>`;});
   if(fd.length>1){
     t1.innerHTML=`<tr class="bg-amber-200 font-black"><td>彙總</td><td>${tS}</td><td class="text-amber-700">${tT}</td></tr>`+t1.innerHTML;
     tD.innerHTML=`<tr class="bg-amber-100 font-black"><td>彙總</td><td class="text-red-700">${wS}</td><td class="text-emerald-800">${fS}</td></tr>`+tD.innerHTML;
-    const at=ks.reduce((s,k)=>s+agS[k],0);
-    tA.innerHTML=`<tr class="bg-amber-200 font-black"><td>彙總</td>${ks.map(k=>`<td>${agS[k]}</td>`).join('')}<td class="bg-amber-200 text-amber-900">${at}</td></tr>`+tA.innerHTML;
+    const at=ksAll.reduce((s,k)=>s+agS[k],0);
+    const sumCells=ksNew.map(k=>`<td class="bg-amber-100">${agS[k]}</td>`).join('')+ksOld.map(k=>`<td class="bg-slate-100 text-gray-500">${agS[k]}</td>`).join('')+ksShared.map(k=>`<td>${agS[k]}</td>`).join('');
+    tA.innerHTML=`<tr class="bg-amber-200 font-black"><td>彙總</td>${sumCells}<td class="bg-amber-200 text-amber-900">${at}</td></tr>`+tA.innerHTML;
   }
 }
 function renderHospitalizationTables(fd){
@@ -679,6 +709,11 @@ function loadFormValues(){
   const wD=d.wen_age_distribution||(d.age_distribution?d.age_distribution:{}),fD=d.fan_age_distribution||{};
   const bks=["6to10m","10mTo1_5y","1_5yTo2y","2yTo3y","3yTo5y","5yTo7y"];
   bks.forEach((k,i)=>{document.getElementById('f-dev-wen-'+(i+1)).value=wD[k]||0;document.getElementById('f-dev-fan-'+(i+1)).value=fD[k]||0;});
+  // 115/7起新制欄位
+  document.getElementById('f-dev-wen-n1').value=wD['6to12m']||0;
+  document.getElementById('f-dev-wen-n2').value=wD['12mTo1_5y']||0;
+  document.getElementById('f-dev-fan-n1').value=fD['6to12m']||0;
+  document.getElementById('f-dev-fan-n2').value=fD['12mTo1_5y']||0;
 }
 async function saveFormToMemory(){
   if(permissionLevel==='viewer'){alert("請先登入。");return;}
@@ -694,6 +729,9 @@ async function saveFormToMemory(){
   const bks=["6to10m","10mTo1_5y","1_5yTo2y","2yTo3y","3yTo5y","5yTo7y"];
   let wA={},fA={},cA={},dW=0,dF=0;
   bks.forEach((k,i)=>{const w=parseInt(document.getElementById('f-dev-wen-'+(i+1)).value)||0,f=parseInt(document.getElementById('f-dev-fan-'+(i+1)).value)||0;wA[k]=w;fA[k]=f;cA[k]=w+f;dW+=w;dF+=f;});
+  // 115/7起新制年齡欄位
+  const newBks=[['6to12m','f-dev-wen-n1','f-dev-fan-n1'],['12mTo1_5y','f-dev-wen-n2','f-dev-fan-n2']];
+  newBks.forEach(([k,wId,fId])=>{const w=parseInt(document.getElementById(wId).value)||0,f=parseInt(document.getElementById(fId).value)||0;wA[k]=w;fA[k]=f;cA[k]=w+f;dW+=w;dF+=f;});
   const nr={period:sp,hospitalization:{温秀惠:{clinic:wC,er:wE,total:wC+wE},范揚達:{clinic:fC,er:fE,total:fC+fE}},asthma:{new_cases:parseInt(document.getElementById('f-asthma-new').value)||0,follow_up:parseInt(document.getElementById('f-asthma-follow').value)||0,annual_follow_up:parseInt(document.getElementById('f-asthma-y-follow').value)||0,closed_cases:parseInt(document.getElementById('f-asthma-close').value)||0,current_managed:match?.asthma?.current_managed||0},specialist:{general_intake:gI,specified_intake:sI,total_intake:gI+sI,general_checkout:gO,specified_checkout:sO,total_checkout:gO+sO,current_managed:match?.specialist?.current_managed||0,wen_detail:{general_intake:wGI,specified_intake:wSI,general_checkout:wGO,specified_checkout:wSO,managed:match?.specialist?.wen_detail?.managed||0},fan_detail:{general_intake:fGI,specified_intake:fSI,general_checkout:fGO,specified_checkout:fSO,managed:match?.specialist?.fan_detail?.managed||0}},development:{opd_seen:dS,cases_taken:dW+dF,wen_cases:dW,fan_cases:dF,wen_age_distribution:wA,fan_age_distribution:fA,age_distribution:cA}};
   if(match)Object.assign(match,nr);else globalData.monthly_records.push(nr);
   globalData.monthly_records=sortRecordsChronologically(globalData.monthly_records);recalcManagedChainsFrom(sp);persistDashboardData();
@@ -761,10 +799,21 @@ function renderAllCharts(fd){
   c_a_d.setOption({tooltip:{trigger:'axis'},legend:{textStyle:LTS,bottom:0},xAxis:{type:'category',data:lp,axisLabel:ALS},yAxis:[{type:'value',axisLabel:ALS,minInterval:1},{type:'value',axisLabel:ALS,minInterval:1}],series:[{name:'新案',type:'bar',color:'#dc2626',label:LSW,data:fd.map(r=>r.asthma?.new_cases||0)},{name:'追蹤',type:'bar',color:'#f97316',label:LSW,data:fd.map(r=>r.asthma?.follow_up||0)},{name:'總列管數',type:'line',yAxisIndex:1,symbolSize:9,lineStyle:{width:4},symbol:'circle',color:'#1d4ed8',data:fd.map(r=>r.asthma?.current_managed||0)}]});
   if(!c_d_d)c_d_d=echarts.init(document.getElementById('c-dev-detail'));
   c_d_d.setOption({tooltip:{trigger:'axis'},legend:{textStyle:{fontSize:12,fontWeight:'bold'},bottom:0},xAxis:{type:'category',data:lp,axisLabel:{fontSize:11,fontWeight:'bold'}},yAxis:{type:'value',minInterval:1},series:[{name:'温秀惠',type:'bar',color:'#ef4444',label:LSW,data:fd.map(r=>r.development?.wen_cases||0)},{name:'范揚達',type:'bar',color:'#1d4ed8',label:LSW,data:fd.map(r=>r.development?.fan_cases||0)}]});
-  const as3={"6to10m":0,"10mTo1_5y":0,"1_5yTo2y":0,"2yTo3y":0,"3yTo5y":0,"5yTo7y":0};
+  const as3={"6to12m":0,"12mTo1_5y":0,"6to10m":0,"10mTo1_5y":0,"1_5yTo2y":0,"2yTo3y":0,"3yTo5y":0,"5yTo7y":0};
   fd.forEach(r=>{const d=r.development?.age_distribution||{};Object.keys(as3).forEach(k=>as3[k]+=(d[k]||0));});
+  // 只顯示有值的切片，避免零值佔位
+  const pieData=[
+    {value:as3["6to12m"],name:'6-12個月(新)',itemStyle:{color:'#f59e0b'}},
+    {value:as3["12mTo1_5y"],name:'12-18個月(新)',itemStyle:{color:'#f97316'}},
+    {value:as3["6to10m"],name:'6至10個月(舊)',itemStyle:{color:'#5b9bd5'}},
+    {value:as3["10mTo1_5y"],name:'10個月-1歲半(舊)',itemStyle:{color:'#b00000'}},
+    {value:as3["1_5yTo2y"],name:'1歲半-2歲',itemStyle:{color:'#00b050'}},
+    {value:as3["2yTo3y"],name:'2歲-3歲',itemStyle:{color:'#ffc000'}},
+    {value:as3["3yTo5y"],name:'3歲-5歲',itemStyle:{color:'#7030a0'}},
+    {value:as3["5yTo7y"],name:'5歲-未滿7歲',itemStyle:{color:'#f48024'}}
+  ].filter(d=>d.value>0);
   if(!c_dev_pie)c_dev_pie=echarts.init(document.getElementById('c-dev-age-pie'));
-  c_dev_pie.setOption({tooltip:{trigger:'item',formatter:'{b}: {c}人 ({d}%)'},legend:{top:0,textStyle:LTS},series:[{type:'pie',radius:'50%',center:['50%','60%'],color:['#5b9bd5','#b00000','#00b050','#ffc000','#7030a0','#f48024'],label:{show:true,formatter:'{b}\n{c}人 ({d}%)',textStyle:{fontSize:12,fontWeight:'bold',color:'#000'}},labelLine:{length:11,length2:8},data:[{value:as3["6to10m"],name:'6至10個月'},{value:as3["10mTo1_5y"],name:'10個月-1歲半'},{value:as3["1_5yTo2y"],name:'1歲半-2歲'},{value:as3["2yTo3y"],name:'2歲-3歲'},{value:as3["3yTo5y"],name:'3歲-5歲'},{value:as3["5yTo7y"],name:'5歲-未滿7歲'}]}]});
+  c_dev_pie.setOption({tooltip:{trigger:'item',formatter:'{b}: {c}人 ({d}%)'},legend:{top:0,textStyle:LTS},series:[{type:'pie',radius:'48%',center:['50%','62%'],label:{show:true,formatter:'{b}\n{c}人 ({d}%)',textStyle:{fontSize:11,fontWeight:'bold',color:'#000'}},labelLine:{length:10,length2:7},data:pieData}]});
 }
 window.addEventListener('resize',()=>{[c_h_m,c_spec_m,c_asthma_m,c_d_m,c_h_d,c_h_p_w,c_h_p_f,c_s_d,c_a_d,c_d_d,c_dev_pie].forEach(c=>{if(c)c.resize();});});
 
